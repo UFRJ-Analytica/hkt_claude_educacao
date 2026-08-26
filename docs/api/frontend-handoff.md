@@ -1,6 +1,6 @@
 # Handoff backend–frontend
 
-Contrato de integração futuro; não há endpoint ou cliente implementado na Etapa 0.
+Contrato de integração da Etapa 1. O endpoint de capabilities está implementado; o cliente frontend ainda não.
 
 ## Fonte de verdade
 
@@ -13,16 +13,16 @@ Na inicialização, o frontend consulta `GET /api/v1/capabilities`. Cada item co
 ```json
 {
   "id": "attendance",
-  "status": "MOCK_ONLY",
-  "source_status": "METADADO_CONFIRMADO",
-  "screens": ["attendance", "school_360", "map"],
-  "agents": ["network_pulse", "investigator"],
-  "limitations": ["fatos sintéticos"],
-  "updated_at": "2026-08-26T00:00:00-03:00"
+  "status": "SCHEMA_ONLY",
+  "source_status": "KNOWN_UNAVAILABLE",
+  "screens": ["attendance"],
+  "agents": [],
+  "limitations": ["Schema conhecido; nenhuma linha de dados está disponível."],
+  "updated_at": "2026-08-26T00:00:00Z"
 }
 ```
 
-`source_status` usa os estados de premissas (`CONFIRMADA`, `METADADO_CONFIRMADO`, `INFERIDA`, `ABERTA`, `INVALIDADA`); `status`, os estados de capacidade (`AVAILABLE`, `MOCK_ONLY`, `SCHEMA_ONLY`, `UNAVAILABLE`, `DISABLED`, `DEGRADED`).
+`source_status` usa os tipos de fonte (`REAL_PUBLIC`, `SYNTHETIC_SCHEMA_FAITHFUL`, `SYNTHETIC_INFERRED`, `KNOWN_UNAVAILABLE`); `status`, os estados de capacidade (`AVAILABLE`, `MOCK_ONLY`, `SCHEMA_ONLY`, `UNAVAILABLE`, `DISABLED`, `DEGRADED`).
 
 ## Comportamento da interface
 
