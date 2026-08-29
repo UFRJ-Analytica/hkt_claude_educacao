@@ -59,6 +59,10 @@ _DERIVATIONS: dict[AnalyticsIndicatorId, str] = {
     ),
 }
 _DATA_ERRORS = (duckdb.Error, OSError, ValueError, RuntimeError, KeyError, TypeError)
+_MIN_PUBLIC_SCHOOL_COUNT = 3
+_PRIVACY_SMALL_GROUP_LIMITATION = (
+    "Valores suprimidos por privacidade: grupo pequeno abaixo do limiar mínimo."
+)
 
 
 class AnalyticsUnavailableError(RuntimeError):
@@ -146,13 +150,20 @@ class AnalyticsService:
         indicator = raw_indicator
         asset, source_kind, formula, unit = _ASSETS[indicator]
         period = self._period(row.get("period"))
-        numerator = _number(row.get("numerator"), "numerator")
-        denominator = _number(row.get("denominator"), "denominator")
-        value = _number(row.get("value"), "value")
+        numerator: float | None = _number(row.get("numerator"), "numerator")
+        denominator: float | None = _number(row.get("denominator"), "denominator")
+        value: float | None = _number(row.get("value"), "value")
         coverage_numerator = _integer(row.get("coverage_numerator"), "coverage numerator")
         coverage_denominator = _integer(row.get("coverage_denominator"), "coverage denominator")
+        suppressed = coverage_denominator < _MIN_PUBLIC_SCHOOL_COUNT
+        if suppressed:
+            numerator = None
+            denominator = None
+            value = None
         quality = (
-            QualityStatus.OK
+            QualityStatus.BLOCKED
+            if suppressed
+            else QualityStatus.OK
             if coverage_denominator > 0 and coverage_numerator == coverage_denominator
             else QualityStatus.DEGRADED
             if coverage_numerator > 0
@@ -167,6 +178,8 @@ class AnalyticsService:
             limitations += (
                 "Cobertura incompleta no escopo selecionado; observação não interpretável.",
             )
+        if suppressed:
+            limitations += (_PRIVACY_SMALL_GROUP_LIMITATION,)
         return ObservationRecordV1(
             observation_id=f"obs1:{identity}",
             evidence_id=f"ev1:{identity}",
@@ -182,6 +195,9 @@ class AnalyticsService:
             coverage_denominator=coverage_denominator,
             quality=quality,
             interpretable=quality is QualityStatus.OK,
+            suppressed=suppressed,
+            suppression_reason="SMALL_GROUP" if suppressed else None,
+            privacy_min_school_count=_MIN_PUBLIC_SCHOOL_COUNT,
             formula_version=formula,
             provenance=self._provenance(f"asset:{asset}", source_kind),
             limitations=limitations,

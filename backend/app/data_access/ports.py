@@ -6,6 +6,7 @@ from app.schools.contracts import MapBounds
 from app.schools.identity_contracts import (
     CanonicalSchoolRecord,
     IdentityMatchField,
+    OfficialSchoolListQuery,
 )
 
 
@@ -16,6 +17,9 @@ class SchoolIdentityPort(Protocol):
     def lookup(
         self, field: IdentityMatchField, value: str
     ) -> CanonicalSchoolRecord | None: ...
+    def list_official_schools(
+        self, query: OfficialSchoolListQuery
+    ) -> tuple[tuple[CanonicalSchoolRecord, ...], int, int, tuple[int, ...]]: ...
 
 
 class DataAccessPort(Protocol):

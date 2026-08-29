@@ -32,11 +32,46 @@ uv run uvicorn app.composition:create_app --factory --port 8077
 | `live` | força API; se ela cair, ainda assim degrada para fixture com aviso |
 | `fixture` | ignora a API |
 
-`VITE_API_BASE` aponta a base da API (padrão `http://127.0.0.1:8077`).
+`VITE_API_BASE` aponta a base da API (padrão `http://127.0.0.1:8000`).
+
+## Rede real
+
+Com a release oficial publicada (`uv run python -m scripts.import_official_school_identity`), o
+mapa consome `GET /api/v1/schools/official` e passa a mostrar as **1.588 unidades reais** da rede
+municipal — identidade, designação SME, CRE, tipo de equipamento e coordenada, fonte Data.Rio/SME
+sob CC-BY 4.0.
+
+Os **indicadores continuam sintéticos**, gerados por escola a partir de uma semente estável do
+`school_id`. Cada métrica declara a própria proveniência `SYNTHETIC_*`, o selo do topo mostra
+`REDE REAL · IND. SINTÉTICOS`, e uma faixa fixa avisa que `network`, `learning`, `attendance`,
+`capacity` e `staffing` estão em `SCHEMA_ONLY` na API.
+
+O contorno do município é o limite oficial do IBGE (malhas v3, município 3304557), embutido em
+`src/domain/rio-geometry.ts`. Sem tiles externos: o mapa funciona offline.
 
 O dataset governado atual tem 30 unidades sintéticas — insuficiente para a
 leitura de rede. Quando a API responde com menos de 200 unidades, o cliente usa
 a fixture e **declara isso** nas limitações, em vez de fingir cobertura.
+
+## Painel de contexto da escola
+
+`GET /api/v1/schools/{id}/context` — chamado ao abrir qualquer unidade real.
+
+Regra central: **uma unidade real sempre abre.** Quando não há métrica carregada para o
+identificador, o backend devolve `metric_coverage.status = IDENTITY_ONLY` com identidade, CRE, tipo
+e coordenada reais. A tela mostra os indicadores como *não carregados* (hachura), explica que falta
+o cruzamento por `CO_ENTIDADE`/INEP, e oferece links de Google Maps e rotas. Nunca "escola não
+encontrada".
+
+Com `SYNTHETIC_SNAPSHOT_MATCHED`, a tela também renderiza métricas e a comparação escola · CRE ·
+rede vinda de `comparisons[]`, sempre rotulada como demonstração.
+
+Educação infantil (`Creche`, `EDI`, `CDEI`) não exibe Desempenho: não há IDEB aplicável, e omitir é
+mais honesto do que mostrar vazio.
+
+`POST /api/v1/ai/school-action-plans` gera o plano em cinco seções — sinais, hipóteses, curto prazo,
+médio prazo e dados faltantes — com guardrails e a política (`raw_rows_access`,
+`decision_automation`) no rodapé. Erros 503 e 422 viram mensagem na tela, sem derrubar o painel.
 
 ## Estrutura
 

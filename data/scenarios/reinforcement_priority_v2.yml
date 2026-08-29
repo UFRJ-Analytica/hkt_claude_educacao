@@ -1,0 +1,22 @@
+version: 2.0.0
+privacy_classification: AGGREGATE_NO_PII
+id: reinforcement_priority_v2
+label: Priorização de reforço e busca ativa
+narrative: >
+  Cenário sintético para testar inteligência gerencial adaptável quando aprendizagem
+  e frequência pioram simultaneamente em parte da rede, com pressão moderada de
+  capacidade, carência docente mais visível e lacunas de qualidade suficientes
+  para forçar a interface/IA a separar evidência educacional de problema de dado.
+seed: 20260829
+parameters:
+  attendance_trend: -0.003
+  assessment_trend: -1.2
+  capacity_pressure: 0.08
+  shortage_factor: 1.4
+  quality_gap: 0.12
+expected_signals:
+  - attendance_down
+  - assessment_down
+  - capacity_pressure_up
+  - shortage_visible
+  - data_quality_caution

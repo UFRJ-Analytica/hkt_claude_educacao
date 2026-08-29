@@ -16,7 +16,11 @@ import duckdb
 
 from app.contracts.provenance import Provenance, SourceKind
 from app.schools.contracts import Coordinates, SchoolIdentity
-from app.schools.identity_contracts import CanonicalSchoolRecord, IdentityMatchField
+from app.schools.identity_contracts import (
+    CanonicalSchoolRecord,
+    IdentityMatchField,
+    OfficialSchoolListQuery,
+)
 
 _IDENTITY_SCHEMA: tuple[tuple[str, str], ...] = (
     ("school_id", "VARCHAR"),
@@ -375,6 +379,67 @@ class CuratedSchoolIdentityAdapter:
 
     def provenance(self) -> Provenance:
         return self._provenance
+
+    @staticmethod
+    def _row_to_record(row: dict[str, object]) -> CanonicalSchoolRecord:
+        coordinates = None
+        if row["latitude"] is not None:
+            coordinates = Coordinates(
+                latitude=cast(float, row["latitude"]),
+                longitude=cast(float, row["longitude"]),
+            )
+        return CanonicalSchoolRecord(
+            identity=SchoolIdentity(
+                school_id=cast(str, row["school_id"]),
+                nome=cast(str, row["school_name"]),
+                inep_id=cast(str | None, row["inep_id"]),
+                sme_designation=cast(str | None, row["sme_designation"]),
+                cre=cast(int, row["cre"]),
+                bairro=cast(str | None, row["neighborhood"]),
+                dependency=cast(str, row["dependency"]),
+                school_type=cast(str | None, row["school_type"]),
+                source_kind=SourceKind.REAL_PUBLIC,
+                limitations=(),
+            ),
+            coordinates=coordinates,
+        )
+
+    def _rows_to_records(self, rows: list[tuple[object, ...]]) -> tuple[CanonicalSchoolRecord, ...]:
+        columns = tuple(name for name, _ in _IDENTITY_SCHEMA)
+        return tuple(self._row_to_record(dict(zip(columns, row, strict=True))) for row in rows)
+
+    def list_official_schools(
+        self, query: OfficialSchoolListQuery
+    ) -> tuple[tuple[CanonicalSchoolRecord, ...], int, int, tuple[int, ...]]:
+        self._assert_asset_current()
+        columns = ", ".join(name for name, _ in _IDENTITY_SCHEMA)
+        where = "WHERE cre = ?" if query.cre is not None else ""
+        params: list[object] = [] if query.cre is None else [query.cre]
+        try:
+            with self._cache_lock:
+                total_row = self._cache.execute(
+                    f"SELECT count(*), count(latitude) FROM official_school_identity {where}",
+                    params,
+                ).fetchone()
+                cre_rows = self._cache.execute(
+                    "SELECT DISTINCT cre FROM official_school_identity ORDER BY cre"
+                ).fetchall()
+                rows = self._cache.execute(
+                    f"SELECT {columns} FROM official_school_identity {where} "
+                    "ORDER BY cre, school_name, school_id LIMIT ? OFFSET ?",
+                    [*params, query.limit, query.offset],
+                ).fetchall()
+        except duckdb.Error as error:
+            raise ValueError("official identity registry query failed") from error
+        self._assert_asset_current()
+        if total_row is None:
+            total = 0
+            with_coordinates = 0
+        else:
+            total = int(total_row[0])
+            with_coordinates = int(total_row[1])
+        available_cres = tuple(int(row[0]) for row in cre_rows)
+        return self._rows_to_records(rows), total, with_coordinates, available_cres
 
     def lookup(
         self, field: IdentityMatchField, value: str

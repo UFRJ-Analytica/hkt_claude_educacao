@@ -11,7 +11,12 @@
  * devolvida para que a tela mostre a cobertura em vez de escondê-la.
  */
 
-import type { IndicatorId, SchoolMapCollection, SchoolMapFeature } from '../api/types';
+import type {
+  IndicatorId,
+  NetworkSnapshotV1,
+  SchoolMapCollection,
+  SchoolMapFeature,
+} from '../api/types';
 import { INDICATOR_ORDER } from './indicators';
 
 export interface CreCell {
@@ -103,7 +108,55 @@ export function deriveSnapshot(collection: SchoolMapCollection, cre?: number | n
   return { rows, totals: aggregate(scoped), units: scoped.length, derived: true };
 }
 
-export const CRE_NAMES: Record<number, string> = {
-  1: 'Centro', 2: 'Zona Sul', 3: 'Méier', 4: 'Irajá', 5: 'Bangu', 6: 'Barra',
-  7: 'Ilha', 8: 'Madureira', 9: 'Campo Grande', 10: 'Santa Cruz', 11: 'Realengo',
-};
+/**
+ * NAO ha rotulo de bairro por CRE nos dados. A release oficial traz o numero da
+ * CRE mas nao a composicao de bairros, e o campo `neighborhood` vem nulo em
+ * todos os 1.588 registros. Rotular a CRE por bairro aqui seria afirmar algo
+ * que a fonte nao sustenta — entao a interface mostra so o numero e a contagem.
+ */
+export function creLabel(cre: number, units?: number): string {
+  return units === undefined ? `${cre}ª CRE` : `${cre}ª CRE · ${units} un`;
+}
+
+/**
+ * Constrói as linhas de Comparar a partir do contrato GOVERNADO
+ * `GET /api/v1/network/snapshot`, em vez da agregação local.
+ *
+ * `series` e `delta` ficam nulos de propósito: série temporal não faz parte do
+ * contrato, e a tela mostra hachura em vez de desenhar uma linha que o backend
+ * não devolveu.
+ */
+export function rowsFromSnapshots(
+  snapshots: { cre: number; snapshot: NetworkSnapshotV1 }[],
+): CreRow[] {
+  return snapshots
+    .map(({ cre, snapshot }) => {
+      const cells = {} as Record<IndicatorId, CreCell>;
+      for (const id of INDICATOR_ORDER) {
+        const o = snapshot.observations.find((x) => x.indicator_id === id);
+        if (!o) {
+          cells[id] = emptyCell();
+          continue;
+        }
+        const readable = o.coverage_numerator;
+        cells[id] = {
+          value: o.quality === 'BLOCKED' ? null : o.value,
+          readable,
+          blocked: Math.max(0, o.coverage_denominator - readable),
+          degraded: o.quality === 'DEGRADED' ? readable : 0,
+          series: null,
+          delta: null,
+        };
+      }
+      const readable = INDICATOR_ORDER.reduce((a, id) => a + cells[id].readable, 0);
+      const slots = snapshot.school_count * INDICATOR_ORDER.length;
+      return {
+        cre,
+        units: snapshot.school_count,
+        enrolment: 0,
+        cells,
+        coverage: slots === 0 ? 0 : readable / slots,
+      };
+    })
+    .sort((a, b) => a.cre - b.cre);
+}

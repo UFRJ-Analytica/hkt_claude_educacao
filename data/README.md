@@ -43,6 +43,30 @@ de retenção. Seed + versão do cenário determinam linhas, bytes e SHA256; cad
 Escolas usam IDs, nomes e coordenadas sintéticos plausíveis do município; não há nome, CPF,
 endereço ou coordenada de aluno. Cenários codificam correlações narrativas, nunca causalidade.
 
+### Cenários v2 e releases segregadas
+
+O cenário `scenarios/reinforcement_priority_v2.yml` simula queda combinada de frequência e
+aprendizagem, pressão de capacidade, carência docente mais visível e lacunas de qualidade.
+Ele foi criado para testar priorização de reforço/busca ativa e a disciplina de IA: explicar
+evidências e limitações sem decidir automaticamente recurso ou rotular escola/professor/aluno.
+
+Para gerar uma release segregada por cenário, sem mexer no ponteiro default:
+
+```bash
+cd backend
+uv run python -m scripts.generate_mock --scenario ../data/scenarios/reinforcement_priority_v2.yml --release-namespace scenario
+```
+
+Isso publica em:
+
+```text
+data/generated/scenarios/reinforcement_priority_v2/current.json
+  -> data/generated/scenarios/reinforcement_priority_v2/releases/<generation_id>/
+```
+
+O modo default continua publicando em `data/generated/current.json` para compatibilidade com o
+runtime atual.
+
 ## Remoção e incidente
 
 A exclusão segue owner, finalidade e prazo registrados. Em vazamento, interromper processamento e seguir [privacidade e segurança](../docs/architecture/privacy-and-safety.md). Proveniência completa está em [data-provenance](../docs/architecture/data-provenance.md).

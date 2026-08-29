@@ -393,6 +393,7 @@ def generate_mock(
     *,
     allow_external_output: bool = False,
     school_count: int = 30,
+    release_namespace: str = "default",
 ) -> dict[str, Any]:
     output_dir = output_dir.resolve()
     if not allow_external_output and output_dir != _DEFAULT_OUTPUT:
@@ -405,6 +406,12 @@ def generate_mock(
         raise ValueError("custom school_count requires external output authorization")
     scenario_path = scenario_path.resolve(strict=True)
     scenario = load_scenario(scenario_path)
+    if release_namespace not in {"default", "scenario"}:
+        raise ValueError("release_namespace must be default or scenario")
+    if release_namespace == "default":
+        publish_dir = output_dir
+    else:
+        publish_dir = output_dir / "scenarios" / scenario.id
     parameters = _normalized_parameters(scenario.parameters.model_dump())
     identity: dict[str, object] = {
         "duckdb_version": duckdb.__version__,
@@ -412,18 +419,19 @@ def generate_mock(
         "parameters": parameters,
         "scenario_sha256": _hash(scenario_path),
         "school_count": school_count,
+        "release_namespace": release_namespace,
     }
     reproducibility: dict[str, object] = identity
 
-    output_dir.parent.mkdir(parents=True, exist_ok=True)
-    with _exclusive_lock(output_dir):
-        _recover_interrupted_publication(output_dir)
+    publish_dir.parent.mkdir(parents=True, exist_ok=True)
+    with _exclusive_lock(publish_dir):
+        _recover_interrupted_publication(publish_dir)
         staging = Path(
-            tempfile.mkdtemp(prefix=f".{output_dir.name}.staging-", dir=output_dir.parent)
+            tempfile.mkdtemp(prefix=f".{publish_dir.name}.staging-", dir=publish_dir.parent)
         )
         try:
             manifest = _build_staged_dataset(staging, scenario, reproducibility, school_count)
-            _publish(staging, output_dir, str(manifest["generation_id"]))
+            _publish(staging, publish_dir, str(manifest["generation_id"]))
         finally:
             _remove_tree(staging)
         return manifest
@@ -439,8 +447,17 @@ def main() -> None:
         type=Path,
         default=Path(__file__).parents[2] / "data/scenarios/network_improving.yml",
     )
+    parser.add_argument(
+        "--release-namespace",
+        choices=("default", "scenario"),
+        default="default",
+        help=(
+            "default publica em output/current.json; "
+            "scenario publica em output/scenarios/<id>/current.json"
+        ),
+    )
     args = parser.parse_args()
-    manifest = generate_mock(args.output, args.scenario)
+    manifest = generate_mock(args.output, args.scenario, release_namespace=args.release_namespace)
     print(
         json.dumps(
             {

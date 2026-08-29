@@ -42,7 +42,7 @@ def test_catalog_and_scenarios_are_valid() -> None:
     assert school.status == school_source.status == "METADATA_CONFIRMED"
     assert school.provenance.source_kind is SourceKind.METADATA_CONFIRMED
     scenarios = sorted((ROOT / "data/scenarios").glob("*.yml"))
-    assert len(scenarios) == 6
+    assert len(scenarios) >= 6
     assert {load_scenario(path).id for path in scenarios} == {path.stem for path in scenarios}
     assert len(METRICS) >= 4
 

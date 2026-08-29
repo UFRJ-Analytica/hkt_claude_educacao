@@ -1,282 +1,347 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { getSchoolMap, getSchoolProfile } from '../api/client';
+import { getSchoolMap } from '../api/client';
+import { AI_ROLE_BY_UI, getSchoolContext, postSchoolActionPlan } from '../api/analytics';
+import type { AISchoolActionPlanResponseV1, IndicatorId, SchoolContext } from '../api/types';
 import { INDICATORS, INDICATOR_ORDER, attentionOf } from '../domain/indicators';
-import { CRE_NAMES } from '../domain/network';
+import { useRole } from '../roles';
 import { Loading } from '../components';
 
-const CW = 640;
-const CH = 172;
+/**
+ * Painel de contexto da escola.
+ *
+ * Regra central: uma unidade REAL sempre abre. Quando não há métrica carregada
+ * para o identificador, o backend devolve `IDENTITY_ONLY` — identidade, CRE,
+ * tipo e coordenada reais, sem indicador — e a tela mostra exatamente isso.
+ * Nunca "escola não encontrada": a escola existe; o que falta é cobertura.
+ */
+
+const FOCUS_OPTIONS = [
+  'frequência e aprendizagem',
+  'evasão e abandono',
+  'infraestrutura',
+  'demanda e lotação',
+  'apoio da CRE',
+];
+
+/** Educação infantil não tem IDEB. Não oferecer indicador que não se aplica. */
+function isEarlyChildhood(schoolType: string | null): boolean {
+  if (!schoolType) return false;
+  const t = schoolType.toLowerCase();
+  return t.includes('creche') || t.includes('edi') || t.includes('cdei');
+}
+
+function applicableIndicators(schoolType: string | null): IndicatorId[] {
+  return isEarlyChildhood(schoolType)
+    ? INDICATOR_ORDER.filter((id) => id !== 'assessment_score')
+    : INDICATOR_ORDER;
+}
 
 export default function Escola() {
   const { id = '' } = useParams();
-  const profile = useQuery({ queryKey: ['profile', id], queryFn: () => getSchoolProfile(id) });
+  const { role } = useRole();
   const map = useQuery({ queryKey: ['map'], queryFn: getSchoolMap });
+  const context = useQuery({ queryKey: ['context', id], queryFn: () => getSchoolContext(id) });
 
-  const peers = useMemo(() => {
-    if (!profile.data || !map.data) return [];
-    const me = map.data.features.find((f) => f.properties.identity.school_id === id);
-    const size = me?.properties.enrolment ?? 500;
-    return map.data.features
-      .filter(
-        (f) =>
-          f.properties.identity.cre === profile.data!.identity.cre &&
-          f.properties.identity.school_id !== id &&
-          Math.abs((f.properties.enrolment ?? 500) - size) / size < 0.25,
-      )
-      .slice(0, 4);
-  }, [profile.data, map.data, id]);
+  const [focus, setFocus] = useState(FOCUS_OPTIONS[0]);
+  const [plan, setPlan] = useState<AISchoolActionPlanResponseV1 | null>(null);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [planning, setPlanning] = useState(false);
 
-  if (profile.isLoading || map.isLoading) return <Loading />;
-  if (!profile.data) {
+  /** Fallback quando a API não responde: o próprio recorte carregado no mapa. */
+  const feature = useMemo(
+    () => map.data?.features.find((f) => f.properties.identity.school_id === id) ?? null,
+    [map.data, id],
+  );
+
+  if (context.isLoading || map.isLoading) return <Loading label="abrindo unidade" />;
+
+  const ctx: SchoolContext | null = context.data ?? null;
+  const identity = ctx?.official_record.identity ?? feature?.properties.identity ?? null;
+  const coords =
+    ctx?.official_record.coordinates ??
+    (feature
+      ? { latitude: feature.geometry.coordinates[1], longitude: feature.geometry.coordinates[0] }
+      : null);
+
+  if (!identity) {
     return (
       <div className="statepage">
-        <div className="k">escola</div>
-        <h2>Escola não encontrada neste snapshot.</h2>
+        <div className="k">unidade</div>
+        <h2>Identificador fora do recorte carregado.</h2>
         <p>
-          O identificador <span className="mono">{id}</span> não existe no conjunto carregado. Isso não significa que a unidade não
-          exista na rede — significa que ela não está neste recorte.
+          O identificador <span className="mono">{id}</span> não está no cadastro carregado nem no
+          recorte do mapa. Isso não significa que a unidade não exista na rede — significa que ela não
+          está neste conjunto.
         </p>
       </div>
     );
   }
 
-  const p = profile.data;
-  const att = p.metrics.attendance_rate;
-  const series = att?.series ?? null;
-  const me = map.data?.features.find((f) => f.properties.identity.school_id === id);
+  const identityOnly = ctx ? ctx.metric_coverage.status === 'IDENTITY_ONLY' : false;
+  const metrics = ctx?.synthetic_profile?.metrics ?? feature?.properties.metrics ?? {};
+  const indicators = applicableIndicators(identity.school_type);
+  const mapsUrl =
+    ctx?.map_links.google_maps_url ??
+    (coords
+      ? `https://www.google.com/maps/search/?api=1&query=${coords.latitude},${coords.longitude}`
+      : null);
+  const routeUrl =
+    ctx?.map_links.directions_url ??
+    (coords
+      ? `https://www.google.com/maps/dir/?api=1&destination=${coords.latitude},${coords.longitude}`
+      : null);
 
-  // faixa dos pares: min/max dos pares legíveis no valor corrente
-  const peerVals = peers
-    .map((f) => f.properties.metrics.attendance_rate)
-    .filter((m) => m && m.value !== null && m.quality_status !== 'BLOCKED')
-    .map((m) => m!.value!);
-  const peerMin = peerVals.length ? Math.min(...peerVals) : null;
-  const peerMax = peerVals.length ? Math.max(...peerVals) : null;
-
-  const bounds = (() => {
-    const vals = [...(series ?? []), ...(peerVals ?? [])].filter((v) => Number.isFinite(v));
-    if (!vals.length) return [0.85, 0.98] as const;
-    const lo = Math.min(...vals) - 0.012;
-    const hi = Math.max(...vals) + 0.012;
-    return [lo, hi] as const;
-  })();
-  const yOf = (v: number) => CH - 48 - ((v - bounds[0]) / (bounds[1] - bounds[0])) * (CH - 70);
-  const xOf = (i: number, n: number) => 42 + (i / Math.max(1, n - 1)) * (CW - 62);
+  const runPlan = async () => {
+    setPlanning(true);
+    setPlan(null);
+    setPlanError(null);
+    const outcome = await postSchoolActionPlan(id, AI_ROLE_BY_UI[role.id], focus);
+    if (outcome.ok && outcome.response) setPlan(outcome.response);
+    else setPlanError(outcome.reason);
+    setPlanning(false);
+  };
 
   return (
     <div>
       <div className="idhead">
-        <div>
-          <h2>{p.identity.nome}</h2>
+        <div style={{ minWidth: 0 }}>
+          <h2>{identity.nome}</h2>
           <div className="codes">
-            <span>{p.identity.school_id}</span>
-            {p.identity.inep_id && <span>INEP {p.identity.inep_id}</span>}
-            {p.identity.sme_designation && <span>SME {p.identity.sme_designation}</span>}
-            <span>
-              {p.identity.cre}ª CRE · {CRE_NAMES[p.identity.cre]}
+            <span>{identity.cre}ª CRE</span>
+            {identity.school_type && <span>{identity.school_type}</span>}
+            {identity.sme_designation && <span>SME {identity.sme_designation}</span>}
+            <span>{identity.inep_id ? `INEP ${identity.inep_id}` : 'INEP não cruzado'}</span>
+            <span className={identity.source_kind === 'REAL_PUBLIC' ? 'realtag' : ''}>
+              {identity.source_kind === 'REAL_PUBLIC' ? 'identidade real' : 'identidade sintética'}
             </span>
-            {p.identity.bairro && <span>{p.identity.bairro}</span>}
-            {me?.properties.enrolment && <span>{me.properties.enrolment} matrículas</span>}
           </div>
         </div>
-        <div className="matchbox">
-          <div className="k mono" style={{ fontSize: 9, letterSpacing: '0.11em', textTransform: 'uppercase', color: 'var(--ink-3)' }}>
-            Origem da localização
-          </div>
-          <div className="val">{p.location.quality === 'SYNTHETIC' ? 'sintética' : p.location.quality}</div>
-          <div className="mono" style={{ fontSize: 10, color: 'var(--ink-3)' }}>
-            match {p.location.match_method.toLowerCase()}
-          </div>
+        <div className="headactions">
+          {mapsUrl && (
+            <a className="btn ghost" href={mapsUrl} target="_blank" rel="noreferrer noopener">
+              Abrir no Google Maps
+            </a>
+          )}
+          {routeUrl && (
+            <a className="btn ghost" href={routeUrl} target="_blank" rel="noreferrer noopener">
+              Rotas
+            </a>
+          )}
         </div>
       </div>
 
       <div className="schoolgrid">
         <div className="schoolmain">
-          <div className="chartblock">
-            <div className="ct">
-              <h5>Taxa de frequência · 12 meses</h5>
-              <span className="cs">
-                {att?.formula_version ?? '—'} · {att?.evidence_id ? att.evidence_id.slice(0, 34) + '…' : 'sem evidência'}
+          <div className={`coverkard${identityOnly ? ' identityonly' : ''}`}>
+            <div className="k">Cobertura de indicadores</div>
+            <p>
+              {ctx?.metric_coverage.message ??
+                'Origem local: a API não respondeu, e os indicadores desta tela vêm do recorte sintético carregado.'}
+            </p>
+            {ctx?.metric_coverage.snapshot_id && (
+              <span className="mono snap">
+                snapshot {ctx.metric_coverage.snapshot_id.slice(0, 16)}…
               </span>
-            </div>
-            {series ? (
-              <svg viewBox={`0 0 ${CW} ${CH}`} width="100%" height={CH} role="img" aria-label="Série mensal de frequência">
-                {[0, 0.5, 1].map((t) => {
-                  const v = bounds[0] + t * (bounds[1] - bounds[0]);
-                  return (
-                    <g key={t}>
-                      <line x1="42" y1={yOf(v)} x2={CW - 20} y2={yOf(v)} stroke="var(--line)" strokeWidth="1" />
-                      <text x="6" y={yOf(v) + 3} fontFamily="IBM Plex Mono, monospace" fontSize="9" fill="var(--ink-3)">
-                        {(v * 100).toFixed(0)}%
-                      </text>
-                    </g>
-                  );
-                })}
-                {peerMin !== null && peerMax !== null && (
-                  <>
-                    <rect
-                      x="42"
-                      y={yOf(peerMax)}
-                      width={CW - 62}
-                      height={Math.max(2, yOf(peerMin) - yOf(peerMax))}
-                      fill="var(--ink-3)"
-                      opacity="0.09"
-                    />
-                    <text
-                      x={CW - 22}
-                      y={yOf(peerMax) - 5}
-                      textAnchor="end"
-                      fontFamily="IBM Plex Mono, monospace"
-                      fontSize="9"
-                      fill="var(--ink-3)"
-                    >
-                      faixa dos pares comparáveis
-                    </text>
-                  </>
-                )}
-                <polyline
-                  points={series.map((v, i) => `${xOf(i, series.length)},${yOf(v)}`).join(' ')}
-                  fill="none"
-                  stroke={attentionOf(att) === 'critical' ? 'var(--a3)' : attentionOf(att) === 'attention' ? 'var(--a2)' : 'var(--ink-2)'}
-                  strokeWidth="2"
-                  strokeLinejoin="round"
-                />
-                <circle
-                  cx={xOf(series.length - 1, series.length)}
-                  cy={yOf(series[series.length - 1])}
-                  r="4.5"
-                  fill={attentionOf(att) === 'critical' ? 'var(--a3)' : 'var(--ink-2)'}
-                  stroke="var(--paper)"
-                  strokeWidth="2"
-                />
-                <text
-                  x={xOf(series.length - 1, series.length) - 8}
-                  y={yOf(series[series.length - 1]) + 18}
-                  textAnchor="end"
-                  fontFamily="IBM Plex Mono, monospace"
-                  fontSize="11"
-                  fill={attentionOf(att) === 'critical' ? 'var(--a3)' : 'var(--ink-2)'}
-                >
-                  {INDICATORS.attendance_rate.format(series[series.length - 1])}
-                </text>
-                {series.map((_, i) => (
-                  <rect
-                    key={i}
-                    x={xOf(i, series.length) - 16}
-                    y={CH - 11}
-                    width="32"
-                    height="3"
-                    fill={i >= 10 ? 'var(--a2)' : 'var(--ink-4)'}
-                  />
-                ))}
-                <text x="6" y={CH - 7} fontFamily="IBM Plex Mono, monospace" fontSize="7" fill="var(--ink-3)">
-                  COB.
-                </text>
-                {['ago 25', 'nov 25', 'fev 26', 'mai 26', 'jul 26'].map((label, i) => (
-                  <text
-                    key={label}
-                    x={xOf([0, 3, 6, 9, 11][i], 12)}
-                    y={CH - 26}
-                    textAnchor={i === 4 ? 'end' : 'middle'}
-                    fontFamily="IBM Plex Mono, monospace"
-                    fontSize="8"
-                    fill="var(--ink-3)"
-                  >
-                    {label}
-                  </text>
-                ))}
-              </svg>
-            ) : (
-              <div style={{ padding: '18px 0' }}>
-                <span className="blockcell" style={{ width: 120 }} />
-                <p className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 10, lineHeight: 1.6 }}>
-                  Série temporal não faz parte do contrato atual de <span style={{ color: 'var(--ink-2)' }}>/api/v1/schools/&#123;id&#125;/profile</span>.
-                  A tela não desenha uma linha que o backend não devolveu.
-                </p>
-              </div>
             )}
           </div>
 
-          <div className="chartblock">
-            <div className="ct">
-              <h5>Pares comparáveis — não é um ranking</h5>
-              <span className="cs">mesma CRE · porte ±25% · critério visível</span>
+          {identityOnly ? (
+            <div className="chartblock">
+              <div className="ct">
+                <h5>Indicadores educacionais</h5>
+                <span className="cs">nenhum carregado para esta unidade</span>
+              </div>
+              <div className="emptymetrics">
+                {indicators.map((iid) => (
+                  <div className="emptyrow" key={iid}>
+                    <span className="nm">{INDICATORS[iid].label}</span>
+                    <span className="blockcell" />
+                    <span className="mono st">não carregado</span>
+                  </div>
+                ))}
+              </div>
+              <p className="hint">
+                A unidade existe e está localizada. O que falta é o cruzamento oficial por{' '}
+                <span className="mono">CO_ENTIDADE</span>/INEP — nenhum valor foi estimado por nome ou
+                endereço.
+              </p>
             </div>
-            {[me, ...peers].filter(Boolean).map((f, i) => {
-              const m = f!.properties.metrics.attendance_rate;
-              const blocked = !m || m.value === null || m.quality_status === 'BLOCKED';
-              const spec = INDICATORS.attendance_rate;
-              const w = blocked ? 0 : ((m!.value! - spec.scale[0]) / (spec.scale[1] - spec.scale[0])) * 100;
-              return (
-                <div
-                  key={f!.properties.identity.school_id}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 120px 58px',
-                    gap: 12,
-                    alignItems: 'center',
-                    padding: '6px 0',
-                    fontSize: 12.5,
-                    color: i === 0 ? 'var(--ink)' : 'var(--ink-2)',
-                    fontWeight: i === 0 ? 600 : 400,
-                  }}
-                >
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {i === 0 ? f!.properties.identity.nome : `${f!.properties.identity.nome} · ${f!.properties.enrolment} matr.`}
+          ) : (
+            <div className="chartblock">
+              <div className="ct">
+                <h5>Indicadores</h5>
+                <span className="cs">
+                  {ctx
+                    ? 'métricas de demonstração — não são desempenho real'
+                    : 'recorte sintético local'}
+                </span>
+              </div>
+              <div className="emptymetrics">
+                {indicators.map((iid) => {
+                  const m = metrics[iid];
+                  const blocked = !m || m.value === null;
+                  const a = attentionOf(m);
+                  const spec = INDICATORS[iid];
+                  const w = blocked
+                    ? 0
+                    : Math.max(
+                        0,
+                        Math.min(1, (m!.value! - spec.scale[0]) / (spec.scale[1] - spec.scale[0])),
+                      ) * 100;
+                  return (
+                    <div className="emptyrow" key={iid}>
+                      <span className="nm">{spec.label}</span>
+                      {blocked ? (
+                        <span className="blockcell" />
+                      ) : (
+                        <span className="bar" style={{ width: 90 }}>
+                          <i className={a} style={{ width: `${w}%` }} />
+                        </span>
+                      )}
+                      <span className={`mono st${blocked ? '' : ' val'}`}>
+                        {blocked ? 'sem leitura' : spec.format(m!.value!)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              {isEarlyChildhood(identity.school_type) && (
+                <p className="hint">
+                  Educação infantil não tem IDEB — desempenho não é indicador aplicável a esta unidade
+                  e foi omitido em vez de exibido como vazio.
+                </p>
+              )}
+            </div>
+          )}
+
+          {ctx && ctx.comparisons.length > 0 && (
+            <div className="chartblock">
+              <div className="ct">
+                <h5>Escola · CRE · rede</h5>
+                <span className="cs">comparação calculada no backend</span>
+              </div>
+              {ctx.comparisons.map((c) => (
+                <div className="cmprow" key={c.indicator_id}>
+                  <span className="nm">{INDICATORS[c.indicator_id].label}</span>
+                  <span className="trio">
+                    <b>{INDICATORS[c.indicator_id].format(c.school_value)}</b>
+                    <span>
+                      CRE{' '}
+                      {c.cre_average === null
+                        ? '—'
+                        : INDICATORS[c.indicator_id].format(c.cre_average)}
+                    </span>
+                    <span>
+                      rede{' '}
+                      {c.network_average === null
+                        ? '—'
+                        : INDICATORS[c.indicator_id].format(c.network_average)}
+                    </span>
                   </span>
-                  <span className="bar" style={{ width: 120, height: 5 }}>
-                    <i
-                      className={i === 0 ? attentionOf(m) : ''}
-                      style={{ width: `${w}%`, background: i === 0 ? undefined : 'var(--ink-4)' }}
-                    />
-                  </span>
-                  <span className="num mut" style={{ textAlign: 'right' }}>
-                    {blocked ? '—' : spec.format(m!.value!)}
+                  <span className={`mono delta${(c.delta_vs_cre ?? 0) < 0 ? ' bad' : ''}`}>
+                    {c.delta_vs_cre === null
+                      ? '—'
+                      : `${c.delta_vs_cre > 0 ? '+' : ''}${(c.delta_vs_cre * 100).toFixed(1).replace('.', ',')} pp vs CRE`}
                   </span>
                 </div>
-              );
-            })}
-            {peers.length === 0 && (
-              <p className="mono" style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 8 }}>
-                Nenhum par de porte semelhante nesta CRE dentro do recorte carregado.
-              </p>
+              ))}
+            </div>
+          )}
+
+          <div className="chartblock">
+            <div className="ct">
+              <h5>Plano de ação</h5>
+              <span className="cs">rascunho de IA · exige validação humana</span>
+            </div>
+            <div className="planbar">
+              <label className="ctl">
+                <span>Foco</span>
+                <select value={focus} onChange={(e) => setFocus(e.target.value)}>
+                  {FOCUS_OPTIONS.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" className="btn solid inline" onClick={runPlan} disabled={planning}>
+                {planning ? 'gerando…' : 'Gerar plano de ação'}
+              </button>
+            </div>
+
+            {planError && <div className="fallbacknote">{planError}</div>}
+
+            {plan && (
+              <div className="plan">
+                <div className="plantitle">{plan.plan.title}</div>
+                {(
+                  [
+                    ['Sinais observados', plan.plan.observed_signals],
+                    ['Hipóteses a validar', plan.plan.hypotheses_to_validate],
+                    ['Ações de curto prazo', plan.plan.short_term_actions],
+                    ['Ações de médio prazo', plan.plan.medium_term_actions],
+                    ['Dados faltantes', plan.plan.data_gaps],
+                  ] as [string, string[]][]
+                ).map(([label, items]) => (
+                  <div className="plansec" key={label}>
+                    <div className="ph">{label}</div>
+                    <ul>
+                      {items.map((it) => (
+                        <li key={it}>{it}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+                <div className="cannot">
+                  <div className="h">Guardrails</div>
+                  {plan.guardrails.map((g) => (
+                    <p key={g}>{g}</p>
+                  ))}
+                </div>
+                <div className="planfoot mono">
+                  {plan.provider} · {plan.model} · role {plan.role} ·{' '}
+                  {plan.policy.raw_rows_access === 'denied' ? 'linhas brutas negadas' : ''} ·{' '}
+                  {plan.policy.decision_automation === 'denied' ? 'decisão automática negada' : ''}
+                </div>
+              </div>
             )}
           </div>
         </div>
 
         <div className="qpanel">
-          <h5>Qualidade por indicador</h5>
-          {INDICATOR_ORDER.map((iid) => {
-            const m = p.metrics[iid];
-            const s = !m || m.value === null ? 'blk' : m.quality_status === 'DEGRADED' ? 'deg' : 'ok';
-            return (
-              <div className="qrow" key={iid}>
-                <span className="nm">{INDICATORS[iid].label}</span>
-                <span className="num mut" style={{ fontSize: 11 }}>
-                  {m?.coverage != null ? `${(m.coverage * 100).toFixed(0)}%` : '—'}
-                </span>
-                <span className={`stt ${s}`}>{s === 'ok' ? 'OK' : s === 'deg' ? 'Degradado' : 'Bloqueado'}</span>
-              </div>
-            );
-          })}
+          <h5>Localização</h5>
+          {coords ? (
+            <div className="mono coordbox">
+              <div>lat {coords.latitude.toFixed(6)}</div>
+              <div>lon {coords.longitude.toFixed(6)}</div>
+            </div>
+          ) : (
+            <p style={{ fontSize: 12, color: 'var(--ink-3)' }}>Sem coordenada nesta release.</p>
+          )}
 
-          <h5 style={{ marginTop: 24 }}>Proveniência</h5>
+          <h5 style={{ marginTop: 22 }}>Proveniência</h5>
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.8 }}>
-            <div>snapshot {p.snapshot_id.slice(0, 16)}…</div>
-            <div>fonte {p.provenance.source_kind}</div>
-            <div>cenário {p.provenance.scenario_reference ?? '—'}</div>
-            <div>semente {p.provenance.generation_seed ?? '—'}</div>
+            <div>identidade {identity.source_kind}</div>
+            {ctx && <div>fonte {ctx.provenance.source_id}</div>}
+            {ctx?.provenance.data_version && (
+              <div>versão {ctx.provenance.data_version.slice(0, 16)}…</div>
+            )}
           </div>
-          {p.provenance.limitations.map((l) => (
-            <p key={l} style={{ fontSize: 11.5, color: 'var(--ink-2)', marginTop: 10, lineHeight: 1.5 }}>
+
+          <h5 style={{ marginTop: 22 }}>Limitações</h5>
+          {(ctx?.limitations ?? map.data?.limitations ?? []).map((l) => (
+            <p key={l} style={{ fontSize: 11.5, color: 'var(--ink-2)', marginTop: 8, lineHeight: 1.5 }}>
               {l}
             </p>
           ))}
 
-          <Link className="btn" to={`/comparar?cre=${p.identity.cre}`}>
-            Comparar na {p.identity.cre}ª CRE
+          <Link className="btn" to={`/comparar?cre=${identity.cre}`}>
+            Comparar na {identity.cre}ª CRE
+          </Link>
+          <Link className="btn ghost" to="/mapa">
+            Voltar ao mapa
           </Link>
         </div>
       </div>

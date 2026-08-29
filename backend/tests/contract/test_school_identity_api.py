@@ -12,6 +12,7 @@ from app.schools.contracts import Coordinates, SchoolIdentity
 from app.schools.identity_contracts import (
     CanonicalSchoolRecord,
     IdentityMatchField,
+    OfficialSchoolListQuery,
 )
 
 SNAPSHOT_ID = "b" * 64
@@ -71,6 +72,19 @@ class ApiIdentityPort:
                 return record
         return None
 
+    def list_official_schools(
+        self, query: OfficialSchoolListQuery
+    ) -> tuple[tuple[CanonicalSchoolRecord, ...], int, int, tuple[int, ...]]:
+        filtered = tuple(
+            record
+            for record in self.records
+            if query.cre is None or record.identity.cre == query.cre
+        )
+        page = filtered[query.offset : query.offset + query.limit]
+        with_coordinates = sum(1 for record in filtered if record.coordinates is not None)
+        available_cres = tuple(sorted({record.identity.cre for record in self.records}))
+        return page, len(filtered), with_coordinates, available_cres
+
 
 def _client(port: SchoolIdentityPort | None) -> TestClient:
     app = create_app(
@@ -78,6 +92,41 @@ def _client(port: SchoolIdentityPort | None) -> TestClient:
         identity_port=port,
     )
     return TestClient(app, raise_server_exceptions=False)
+
+
+def test_official_school_list_exposes_real_locations_for_frontend() -> None:
+    response = _client(cast(SchoolIdentityPort, ApiIdentityPort())).get(
+        "/api/v1/schools/official", params={"cre": 1, "limit": 10}
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["snapshot_id"] == SNAPSHOT_ID
+    assert payload["generated"] is False
+    assert payload["available_cres"] == [1, 2]
+    assert payload["coverage"] == {"total": 1, "with_coordinates": 1, "returned": 1}
+    assert payload["records"][0]["identity"]["school_id"] == "SME-RIO-000001"
+    assert payload["records"][0]["identity"]["cre"] == 1
+    assert payload["records"][0]["coordinates"] == {"latitude": -22.9, "longitude": -43.2}
+    assert payload["provenance"]["source_kind"] == "REAL_PUBLIC"
+
+
+def test_school_context_opens_real_school_even_without_metric_snapshot() -> None:
+    response = _client(cast(SchoolIdentityPort, ApiIdentityPort())).get(
+        "/api/v1/schools/SME-RIO-000001/context"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["api_contract_version"] == "1.0.0"
+    assert payload["official_record"]["identity"]["school_id"] == "SME-RIO-000001"
+    assert payload["official_record"]["coordinates"] == {"latitude": -22.9, "longitude": -43.2}
+    assert payload["map_links"]["google_maps_url"].startswith("https://www.google.com/maps/search/?api=1&query=-22.9,-43.2")
+    assert payload["map_links"]["directions_url"].startswith("https://www.google.com/maps/dir/?api=1&destination=-22.9,-43.2")
+    assert payload["metric_coverage"]["status"] == "IDENTITY_ONLY"
+    assert payload["synthetic_profile"] is None
+    assert payload["comparisons"] == []
+    assert any("Indicadores" in item for item in payload["limitations"])
 
 
 def test_exact_identity_resolution_is_exposed_with_official_provenance() -> None:
@@ -141,8 +190,13 @@ def test_invalid_identity_lookup_is_sanitized_422(params: dict[str, str]) -> Non
     }
 
 
+class UnavailableIdentityPort(ApiIdentityPort):
+    def validate(self) -> bool:
+        return False
+
+
 def test_missing_official_release_returns_503_and_schema_only_capability() -> None:
-    client = _client(None)
+    client = _client(cast(SchoolIdentityPort, UnavailableIdentityPort()))
 
     response = client.get("/api/v1/schools/resolve", params={"inep_id": "33000001"})
     capabilities = client.get("/api/v1/capabilities").json()

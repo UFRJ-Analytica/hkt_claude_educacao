@@ -4,6 +4,18 @@ import { getSchoolMap, getSituations, mapOrigin } from '../api/client';
 import { deriveSnapshot } from '../domain/network';
 import { Loading } from '../components';
 
+/**
+ * Equipe digital. Os estados abaixo descrevem o desenho do runtime de agentes
+ * documentado em docs/architecture/agent-runtime.md; nenhum agente executa
+ * ainda. O Guardiao e o unico com poder de veto sobre os demais.
+ */
+const AGENTS = [
+  { name: 'Guardiao de Dados', state: 'watch', label: 'vigiando', line: '6 datasets monitorados - 1 bloqueio ativo sobre desempenho' },
+  { name: 'Sentinela da Rede', state: 'run', label: 'analisando', line: 'Reclassificando situacoes sobre o snapshot corrente' },
+  { name: 'Investigador', state: 'rev', label: 'aguarda revisao', line: 'Dossie pronto - 4 fatos, 3 hipoteses, 2 contra-hipoteses' },
+  { name: 'Preparador de Reuniao', state: 'wait', label: 'aguardando dados', line: 'Precisa do calendario letivo para fechar a pauta' },
+] as const;
+
 const LEVEL_LABEL: Record<string, string> = {
   critical: 'Crítico',
   attention: 'Atenção',
@@ -42,22 +54,28 @@ export default function Hoje() {
           <div className="k">Frequência</div>
           <div className="v">
             {attendance.value === null ? '—' : `${(attendance.value * 100).toFixed(1).replace('.', ',')}%`}
-            {attendance.delta !== null && (
-              <em className={attendance.delta < 0 ? 'bad' : ''}>
-                {attendance.delta < 0 ? '▼' : '▲'} {Math.abs(attendance.delta * 100).toFixed(1).replace('.', ',')} pp
-              </em>
-            )}
+            {attendance.delta !== null &&
+              (Math.abs(attendance.delta) < 0.003 ? (
+                <em>estável</em>
+              ) : (
+                <em className={attendance.delta < 0 ? 'bad' : ''}>
+                  {attendance.delta < 0 ? '▼' : '▲'} {Math.abs(attendance.delta * 100).toFixed(1).replace('.', ',')} pp
+                </em>
+              ))}
           </div>
         </div>
         <div className="st">
           <div className="k">Carência</div>
           <div className="v">
             {shortage.value === null ? '—' : `${(shortage.value * 100).toFixed(1).replace('.', ',')}%`}
-            {shortage.delta !== null && (
-              <em className={shortage.delta > 0 ? 'bad' : ''}>
-                {shortage.delta > 0 ? '▲' : '▼'} {Math.abs(shortage.delta * 100).toFixed(1).replace('.', ',')} pp
-              </em>
-            )}
+            {shortage.delta !== null &&
+              (Math.abs(shortage.delta) < 0.003 ? (
+                <em>estável</em>
+              ) : (
+                <em className={shortage.delta > 0 ? 'bad' : ''}>
+                  {shortage.delta > 0 ? '▲' : '▼'} {Math.abs(shortage.delta * 100).toFixed(1).replace('.', ',')} pp
+                </em>
+              ))}
           </div>
         </div>
         <div className="st mut">
@@ -94,8 +112,12 @@ export default function Hoje() {
                 <h4>{s.title}</h4>
                 <div className="meta">
                   {s.meta}
-                  {s.blockedReason ? ` · ${s.blockedReason}` : ''} · {s.agent}
+                  {s.blockedReason ? ` · ${s.blockedReason}` : ''}
                 </div>
+                <span className="agentchip">
+                  <i />
+                  {s.agent}
+                </span>
               </div>
               <div className="side">
                 {blocked ? (
@@ -113,6 +135,19 @@ export default function Hoje() {
             </button>
           );
         })}
+      </div>
+
+      <div className="agentrail">
+        {AGENTS.map((a) => (
+          <div className="agentcard" key={a.name}>
+            <div className="top">
+              {a.state === 'run' ? <span className="dotpulse" /> : null}
+              <span className="nm">{a.name}</span>
+              <span className={`stt2 ${a.state}`}>{a.label}</span>
+            </div>
+            <div className="ln">{a.line}</div>
+          </div>
+        ))}
       </div>
 
       <div className="footnote">

@@ -61,6 +61,9 @@ class ObservationRecordV1(StrictModel):
     coverage_denominator: int = Field(ge=0)
     quality: QualityStatus
     interpretable: bool
+    suppressed: bool = False
+    suppression_reason: Literal["SMALL_GROUP"] | None = None
+    privacy_min_school_count: int = Field(default=3, ge=2)
     formula_version: str = Field(min_length=1)
     provenance: Provenance
     limitations: tuple[str, ...] = ()
@@ -102,6 +105,15 @@ class ObservationRecordV1(StrictModel):
                 self.value, expected, rel_tol=1e-9, abs_tol=1e-12
             ):
                 raise ValueError("value must equal numerator divided by denominator")
+        if self.suppressed:
+            if self.suppression_reason != "SMALL_GROUP":
+                raise ValueError("suppressed observations require a reason")
+            if self.value is not None or self.numerator is not None or self.denominator is not None:
+                raise ValueError("suppressed observations cannot expose values")
+            if self.quality is not QualityStatus.BLOCKED or self.interpretable:
+                raise ValueError("suppressed observations must be blocked")
+        elif self.suppression_reason is not None:
+            raise ValueError("unsuppressed observations cannot include a suppression reason")
         if self.formula_version not in _FORMULAS[self.indicator_id]:
             raise ValueError("formula_version is not allowed for indicator")
         missing = self.value is None

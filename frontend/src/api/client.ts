@@ -4,17 +4,26 @@
  * falha, e a origem do dado é sempre declarada na tela.
  */
 
-import { FIXTURE_CAPABILITIES, FIXTURE_SITUATIONS, fixtureMap, fixtureSchool } from './fixtures';
+import {
+  FIXTURE_CAPABILITIES,
+  FIXTURE_SITUATIONS,
+  fixtureMap,
+  fixtureSchool,
+  syntheticMetricsFor,
+  syntheticQualityFor,
+} from './fixtures';
 import type {
   ApiMode,
   ApiSource,
   Capability,
+  OfficialSchoolCollection,
+  SchoolMapFeature,
   SchoolMapCollection,
   SchoolProfile,
   Situation,
 } from './types';
 
-const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://127.0.0.1:8077';
+const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? 'http://127.0.0.1:8000';
 const MODE = (import.meta.env.VITE_API_MODE as string | undefined) ?? 'auto';
 
 let resolved: ApiSource | null = null;
@@ -64,23 +73,109 @@ export async function getCapabilities(): Promise<Capability[]> {
  * API respondeu. A API pode estar de pé e ainda assim não sustentar a leitura
  * de rede; nesse caso o selo do topo precisa dizer fixture, não live.
  */
-let lastMapOrigin: { mode: ApiMode; note: string } = { mode: 'fixture', note: 'fixture local' };
+let lastMapOrigin: { mode: ApiMode; note: string; geoReal: boolean } = {
+  mode: 'fixture',
+  note: 'fixture local',
+  geoReal: false,
+};
 export function mapOrigin() {
   return lastMapOrigin;
 }
 
+/**
+ * Rede real do município: identidade, CRE, tipo e coordenada da release oficial
+ * Data.Rio/SME. Não traz indicador — só o cadastro.
+ */
+export async function getOfficialSchools(): Promise<OfficialSchoolCollection | null> {
+  return get<OfficialSchoolCollection>('/api/v1/schools/official?limit=2000');
+}
+
+/**
+ * Compõe a rede real com indicadores sintéticos.
+ *
+ * A identidade é REAL_PUBLIC e cada métrica carrega a própria proveniência
+ * SYNTHETIC_*. As duas origens convivem no mesmo objeto porque o contrato
+ * separa `identity.source_kind` de `metric.source_kind` — e a interface mostra
+ * as duas. Não é dado real de desempenho, e a tela nunca diz que é.
+ */
+function composeFromOfficial(official: OfficialSchoolCollection): SchoolMapCollection {
+  const features: SchoolMapFeature[] = [];
+  let missing = 0;
+
+  for (const r of official.records) {
+    if (!r.coordinates) {
+      missing += 1;
+      continue;
+    }
+    const { metrics, enrolment } = syntheticMetricsFor(r.identity.school_id, r.identity.cre);
+    features.push({
+      type: 'Feature',
+      geometry: {
+        type: 'Point',
+        coordinates: [r.coordinates.longitude, r.coordinates.latitude],
+      },
+      properties: {
+        identity: r.identity,
+        location: {
+          location_source: 'DATARIO',
+          match_method: 'SME_DESIGNATION',
+          quality: 'CONFIRMED',
+        },
+        metrics,
+        quality_status: syntheticQualityFor(r.identity.cre),
+        enrolment,
+      },
+    });
+  }
+
+  const total = features.length + missing;
+  return {
+    type: 'FeatureCollection',
+    features,
+    coverage: {
+      total,
+      geolocated: features.length,
+      missing,
+      returned: features.length,
+      truncated: false,
+      coverage_ratio: total === 0 ? 0 : features.length / total,
+    },
+    available_cres: official.available_cres,
+    snapshot_id: official.snapshot_id,
+    generated: false,
+    provenance: official.provenance,
+    limitations: [
+      ...official.limitations,
+      'Identidade, CRE, tipo e coordenada são reais. Os INDICADORES exibidos são sintéticos e cada métrica declara a própria proveniência.',
+    ],
+  };
+}
+
 export async function getSchoolMap(): Promise<SchoolMapCollection> {
+  // 1) rede real do cadastro oficial, quando disponível
+  const official = await getOfficialSchools();
+  if (official && official.records.length >= 200) {
+    lastMapOrigin = {
+      mode: 'live',
+      note: `cadastro oficial Data.Rio/SME · ${official.coverage.total.toLocaleString('pt-BR')} unidades reais · indicadores sintéticos`,
+      geoReal: true,
+    };
+    return composeFromOfficial(official);
+  }
+
+  // 2) dataset sintético governado do backend
   const live = await get<SchoolMapCollection>('/api/v1/map/schools?limit=2000');
   // O dataset governado atual traz poucas unidades; quando ele não sustenta a
   // leitura de rede, a tela declara a fixture em vez de fingir cobertura.
   if (live && live.features.length >= 200) {
-    lastMapOrigin = { mode: 'live', note: `API local · ${live.features.length} unidades` };
+    lastMapOrigin = { mode: 'live', note: `API local · ${live.features.length} unidades`, geoReal: false };
     return live;
   }
   if (live) {
     lastMapOrigin = {
       mode: 'fixture',
       note: `API de pé, mas com ${live.features.length} unidades — insuficiente para leitura de rede. Fixture em uso.`,
+      geoReal: false,
     };
     return {
       ...fixtureMap(),
@@ -90,7 +185,7 @@ export async function getSchoolMap(): Promise<SchoolMapCollection> {
       ],
     };
   }
-  lastMapOrigin = { mode: 'fixture', note: 'API não respondeu — fixture local em uso' };
+  lastMapOrigin = { mode: 'fixture', note: 'API não respondeu — fixture local em uso', geoReal: false };
   return fixtureMap();
 }
 

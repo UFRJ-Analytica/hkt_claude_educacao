@@ -6,6 +6,7 @@ import duckdb
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.ai.service import AIBriefingService
 from app.analytics.service import AnalyticsService
 from app.api.v1.health import build_health_router
 from app.api.v1.router import build_v1_router
@@ -267,6 +268,17 @@ def create_app(
     school_map_service = _school_map_service(resolved_settings, schools_enabled, data_access)
     analytics_service = _analytics_service(resolved_settings, analytics_enabled, data_access)
     identity_resolver = _school_identity_resolver(identity_port) if identity_enabled else None
+    ai_service = (
+        AIBriefingService(
+            analytics_service,
+            provider=resolved_settings.ai_provider,
+            anthropic_api_key=resolved_settings.anthropic_api_key,
+            identity_resolver=identity_resolver,
+            school_map_service=school_map_service,
+        )
+        if analytics_service is not None or identity_resolver is not None
+        else None
+    )
     registry = ModuleRegistry(
         initial_modules(
             resolved_settings.mock_data_enabled,
@@ -334,6 +346,7 @@ def create_app(
             mapping_service,
             join_service,
             analytics_service,
+            ai_service,
         )
     )
     return app

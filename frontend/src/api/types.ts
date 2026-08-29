@@ -133,10 +133,10 @@ export interface SchoolProfile {
 }
 
 /**
- * Contrato ANTECIPADO de `GET /api/v1/network/snapshot`, ainda não implementado
- * no backend (fase B3 da correção de rota). O front consome esta forma para que
- * a integração seja troca de URL. Em modo live, a tela declara que a origem é
- * fixture.
+ * Situação priorizada. NÃO existe endpoint para isto ainda — a priorização
+ * governada (gravidade × tendência × persistência × população × confiança) é
+ * responsabilidade do backend determinístico com revisão de agente. O front
+ * consome esta forma como fixture e a tela de Hoje declara a origem.
  */
 export interface Situation {
   id: string;
@@ -156,4 +156,172 @@ export interface ApiSource {
   mode: ApiMode;
   base: string | null;
   note: string;
+}
+
+/* ============================================================
+   Contratos analíticos e de IA — implementados no backend
+   (app/analytics/contracts.py e app/ai/contracts.py).
+   ============================================================ */
+
+export type ScopeType = 'NETWORK' | 'CRE' | 'SCHOOL';
+export interface AnalyticsScope {
+  type: ScopeType;
+  id: string;
+}
+
+export type AnalyticsIndicatorId = IndicatorId;
+
+export interface ObservationRecordV1 {
+  observation_id: string;
+  evidence_id: string;
+  scope: AnalyticsScope;
+  indicator_id: AnalyticsIndicatorId;
+  value: number | null;
+  unit: string;
+  numerator: number | null;
+  denominator: number | null;
+  period_start: string;
+  period_end: string;
+  published_at: string | null;
+  coverage_numerator: number;
+  coverage_denominator: number;
+  quality: QualityStatus;
+  interpretable: boolean;
+  formula_version: string;
+  provenance: Provenance;
+  limitations: string[];
+  suppressed?: boolean;
+}
+
+export interface NetworkSnapshotV1 {
+  api_contract_version: string;
+  snapshot_id: string;
+  scope: AnalyticsScope;
+  school_count: number;
+  observations: ObservationRecordV1[];
+  generated: boolean;
+  provenance: Provenance;
+  limitations: string[];
+}
+
+export interface QualityCheckSummaryV1 {
+  check_id: string;
+  status: QualityStatus;
+  affected_school_count: number;
+  observed_school_count: number;
+  school_count: number;
+  coverage_mean: number;
+  coverage_aggregation: 'mean';
+}
+
+export interface DataQualitySummaryV1 {
+  api_contract_version: string;
+  snapshot_id: string;
+  scope: AnalyticsScope;
+  checks: QualityCheckSummaryV1[];
+  generated: boolean;
+  provenance: Provenance;
+  limitations: string[];
+}
+
+export interface EvidenceRecordV1 {
+  api_contract_version: string;
+  snapshot_id: string;
+  evidence_id: string;
+  observation: ObservationRecordV1;
+}
+
+/** Papéis do runtime de IA. Espelham o seletor de papel da interface. */
+export type AIRole = 'central_manager' | 'school_manager' | 'teacher' | 'guardian';
+
+export interface AIGovernancePolicyV1 {
+  raw_rows_access: 'denied';
+  decision_automation: 'denied';
+  allowed_tools: string[];
+  max_evidence_ids: number;
+}
+
+export interface AIBriefingResponseV1 {
+  api_contract_version: string;
+  provider: 'fake' | 'anthropic';
+  model: string;
+  role: AIRole;
+  snapshot_id: string;
+  used_evidence_ids: string[];
+  answer: string;
+  guardrails: string[];
+  policy: AIGovernancePolicyV1;
+}
+
+/** `GET /api/v1/schools/official` — release curada do cadastro oficial. */
+export interface OfficialSchoolRecord {
+  identity: SchoolIdentity;
+  coordinates: { latitude: number; longitude: number } | null;
+}
+
+export interface OfficialSchoolCollection {
+  records: OfficialSchoolRecord[];
+  coverage: { total: number; with_coordinates: number; returned: number };
+  available_cres: number[];
+  snapshot_id: string;
+  generated: boolean;
+  provenance: Provenance;
+  limitations: string[];
+}
+
+/* ============================================================
+   `GET /api/v1/schools/{id}/context` e
+   `POST /api/v1/ai/school-action-plans`
+   ============================================================ */
+
+export type MetricCoverageStatus = 'IDENTITY_ONLY' | 'SYNTHETIC_SNAPSHOT_MATCHED';
+
+export interface SchoolMetricComparison {
+  indicator_id: IndicatorId;
+  school_value: number;
+  cre_average: number | null;
+  network_average: number | null;
+  delta_vs_cre: number | null;
+  delta_vs_network: number | null;
+  period: string | null;
+  evidence_id: string | null;
+  source_kind: SourceKind;
+}
+
+export interface SchoolContext {
+  api_contract_version: string;
+  official_record: {
+    identity: SchoolIdentity;
+    coordinates: { latitude: number; longitude: number } | null;
+  };
+  map_links: { google_maps_url: string; directions_url: string };
+  metric_coverage: {
+    status: MetricCoverageStatus;
+    message: string;
+    snapshot_id: string | null;
+  };
+  synthetic_profile: SchoolProfile | null;
+  comparisons: SchoolMetricComparison[];
+  provenance: Provenance;
+  limitations: string[];
+}
+
+export interface SchoolActionPlan {
+  title: string;
+  observed_signals: string[];
+  hypotheses_to_validate: string[];
+  short_term_actions: string[];
+  medium_term_actions: string[];
+  data_gaps: string[];
+}
+
+export interface AISchoolActionPlanResponseV1 {
+  api_contract_version: string;
+  provider: 'fake' | 'anthropic';
+  model: string;
+  role: AIRole;
+  school_context: SchoolContext;
+  plan: SchoolActionPlan;
+  guardrails: string[];
+  policy: AIGovernancePolicyV1;
 }

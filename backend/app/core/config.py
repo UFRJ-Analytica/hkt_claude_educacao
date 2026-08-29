@@ -1,7 +1,7 @@
 import ipaddress
 import re
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
 
 from pydantic import BeforeValidator, Field, field_validator
@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     version: str = "0.1.0"
     environment: str = "local"
     mock_data_enabled: bool = False
+    ai_provider: Literal["fake", "anthropic"] = "fake"
+    anthropic_api_key: str | None = None
     intake_root: Path = Path(".intake")
     intake_catalog_path: Path = Path(".control/intake_catalog.sqlite3")
     intake_max_bytes: int = Field(default=10_000_000, gt=0)

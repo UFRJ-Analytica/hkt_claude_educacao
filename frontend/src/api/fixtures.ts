@@ -12,6 +12,7 @@
  *  - identidade sintética não carrega INEP nem designação SME.
  */
 
+import { RIO_RINGS } from '../domain/rio-geometry';
 import type {
   Capability,
   IndicatorId,
@@ -55,56 +56,70 @@ function provenance(asset: string, kind: SchoolMetric['source_kind']): Provenanc
 }
 
 /**
- * Geografia ilustrativa do município: um contorno aproximado e um centro por
- * CRE. As escolas são amostradas por rejeição dentro do contorno, em torno do
- * centro da sua CRE — o resultado tem a forma orgânica de uma cidade, e as
- * regiões do mapa são o casco convexo desses pontos, não a fronteira oficial.
+ * Geografia. O contorno e o limite OFICIAL do municipio (IBGE, ver
+ * rio-geometry.ts): escolas sao amostradas por rejeicao dentro dele, em torno
+ * de um centro plausivel para cada CRE.
+ *
+ * ATENCAO: a atribuicao de bairro a CRE aqui e ILUSTRATIVA e sera substituida
+ * pelos dados reais quando a release do INEP/SME for ingerida. O contorno do
+ * municipio, esse sim, ja e real.
  */
-const CRE_ORDER = [10, 9, 5, 11, 6, 8, 3, 7, 4, 1, 2];
+const CRE_ORDER = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 const CRE_COUNTS: Record<number, number> = {
   1: 89, 2: 107, 3: 190, 4: 149, 5: 190, 6: 135,
   7: 141, 8: 155, 9: 178, 10: 96, 11: 118,
 };
 const CRE_NAMES: Record<number, string> = {
-  1: 'Centro', 2: 'Zona Sul', 3: 'Méier', 4: 'Irajá', 5: 'Bangu', 6: 'Barra',
-  7: 'Ilha', 8: 'Madureira', 9: 'Campo Grande', 10: 'Santa Cruz', 11: 'Realengo',
+  1: 'Centro', 2: 'Zona Sul e Tijuca', 3: 'Penha e Ilha', 4: 'Meier',
+  5: 'Madureira e Iraja', 6: 'Bangu e Realengo', 7: 'Campo Grande',
+  8: 'Santa Cruz', 9: 'Jacarepagua', 10: 'Barra e Recreio',
+  11: 'Pavuna e Anchieta',
 };
 const CRE_CENTRES: Record<number, [number, number]> = {
-  10: [-43.700, -22.918], 9: [-43.575, -22.898], 5: [-43.472, -22.872],
-  11: [-43.400, -22.884], 6: [-43.358, -22.980], 8: [-43.330, -22.858],
-  3: [-43.278, -22.892], 7: [-43.248, -22.818], 4: [-43.318, -22.816],
-  1: [-43.192, -22.892], 2: [-43.208, -22.960],
+  1: [-43.185, -22.905], 2: [-43.215, -22.948], 3: [-43.278, -22.845],
+  4: [-43.292, -22.890], 5: [-43.342, -22.866], 6: [-43.468, -22.880],
+  7: [-43.562, -22.902], 8: [-43.688, -22.916], 9: [-43.376, -22.932],
+  10: [-43.402, -23.002], 11: [-43.360, -22.812],
 };
-const OUTLINE: [number, number][] = [
-  [-43.790, -22.888], [-43.720, -22.852], [-43.648, -22.822], [-43.578, -22.802],
-  [-43.500, -22.800], [-43.420, -22.820], [-43.352, -22.798], [-43.282, -22.788],
-  [-43.220, -22.798], [-43.158, -22.830], [-43.148, -22.892], [-43.172, -22.940],
-  [-43.212, -22.982], [-43.282, -23.012], [-43.360, -23.030], [-43.450, -23.022],
-  [-43.552, -23.000], [-43.650, -22.972], [-43.742, -22.940],
-];
+const CRE_SPREAD: Record<number, number> = {
+  1: 0.65, 2: 0.9, 3: 0.9, 4: 0.7, 5: 0.85, 6: 1.1,
+  7: 1.15, 8: 1.2, 9: 1.0, 10: 1.3, 11: 0.75,
+};
 
-function insideOutline(lon: number, lat: number): boolean {
-  let hit = false;
-  for (let i = 0, j = OUTLINE.length - 1; i < OUTLINE.length; j = i, i += 1) {
-    const [xi, yi] = OUTLINE[i];
-    const [xj, yj] = OUTLINE[j];
-    if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) hit = !hit;
+function insideCity(lon: number, lat: number): boolean {
+  for (const ring of RIO_RINGS) {
+    let hit = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+      const [xi, yi] = ring[i];
+      const [xj, yj] = ring[j];
+      if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) hit = !hit;
+    }
+    if (hit) return true;
   }
-  return hit;
+  return false;
 }
 
-/** Box–Muller com o PRNG semeado; mantém a geração determinística. */
+/** Box-Muller com o PRNG semeado; mantem a geracao determinista. */
 function gauss(rand: () => number): number {
   const u = Math.max(1e-9, rand());
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand());
 }
 
+/**
+ * Distribuicao em mistura: a maioria das unidades fica no entorno do centro da
+ * CRE, mas uma parcela se espalha bem mais longe. Gaussiana pura produz bolhas
+ * artificiais; a rede real se distribui pelo territorio inteiro, com CREs que
+ * se interpenetram nas bordas.
+ */
 function samplePoint(cre: number, rand: () => number): [number, number] {
   const [cx, cy] = CRE_CENTRES[cre];
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    const lon = cx + gauss(rand) * 0.024;
-    const lat = cy + gauss(rand) * 0.017;
-    if (insideOutline(lon, lat)) return [lon, lat];
+  const spread = CRE_SPREAD[cre];
+  const tail = rand() < 0.34 ? 2.4 : 1;
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const widen = 1 + attempt * 0.02;
+    const lon = cx + gauss(rand) * 0.034 * spread * tail * widen;
+    const lat = cy + gauss(rand) * 0.019 * spread * tail * widen;
+    if (insideCity(lon, lat)) return [lon, lat];
   }
   return [cx, cy];
 }
@@ -292,6 +307,70 @@ function generate(): {
 
   const byId = new Map(features.map((f) => [f.properties.identity.school_id, f]));
   return { collection, byId };
+}
+
+/** Hash estável de string para semear o PRNG por escola. */
+function hashSeed(value: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < value.length; i += 1) {
+    h ^= value.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
+ * Indicadores sintéticos para uma escola REAL.
+ *
+ * A identidade (nome, CRE, tipo, coordenada) vem da release oficial e é
+ * REAL_PUBLIC. Os indicadores continuam sintéticos e cada métrica carrega a
+ * própria proveniência SYNTHETIC_*, então a tela consegue mostrar as duas
+ * origens ao mesmo tempo sem confundi-las. A semente é o school_id: a mesma
+ * escola recebe sempre os mesmos valores.
+ */
+export function syntheticMetricsFor(
+  schoolId: string,
+  cre: number,
+): { metrics: MetricMap; enrolment: number } {
+  const rand = mulberry32(hashSeed(schoolId));
+  const k = CRE_KNOBS[cre] ?? CRE_KNOBS[1];
+  const jitter = (scale: number) => (rand() - 0.5) * scale;
+
+  const attendance = Math.min(0.995, Math.max(0.79, k.attendance + jitter(0.034)));
+  const shortage = Math.max(0, k.shortage + jitter(0.05));
+  const capacity = Math.max(0.55, k.capacity + jitter(0.15));
+  const assessment = 218 + (attendance - 0.95) * 300 + jitter(18);
+
+  const assessmentBlocked = k.assessCoverage < 0.5;
+  const degradedCapacity = k.capCoverage < 0.8;
+
+  const metrics: MetricMap = {
+    attendance_rate: metric(
+      'attendance_rate', Number(attendance.toFixed(4)), 'OK', 'ratio-of-sums-v1',
+      'SYNTHETIC_SCHEMA_FAITHFUL', schoolId,
+      buildSeries(attendance, k.trend + jitter(0.006), rand), 0.96,
+    ),
+    assessment_score: assessmentBlocked
+      ? metric('assessment_score', null, 'BLOCKED', 'mean-score-v1', 'SYNTHETIC_SCHEMA_FAITHFUL', schoolId, null, k.assessCoverage)
+      : metric('assessment_score', Number(assessment.toFixed(1)), 'OK', 'mean-score-v1', 'SYNTHETIC_SCHEMA_FAITHFUL', schoolId, buildSeries(assessment, jitter(6), rand), k.assessCoverage),
+    capacity_utilization: metric(
+      'capacity_utilization', Number(capacity.toFixed(4)),
+      degradedCapacity ? 'DEGRADED' : 'OK', 'ratio-of-sums-v1', 'SYNTHETIC_INFERRED',
+      schoolId, buildSeries(capacity, jitter(0.05), rand), k.capCoverage,
+    ),
+    teacher_shortage_rate: metric(
+      'teacher_shortage_rate', Number(shortage.toFixed(4)), 'OK', 'ratio-of-sums-v1',
+      'SYNTHETIC_INFERRED', schoolId, buildSeries(shortage, -jitter(0.03), rand), 0.88,
+    ),
+  };
+  return { metrics, enrolment: 180 + Math.floor(rand() * 900) };
+}
+
+export function syntheticQualityFor(cre: number): QualityStatus {
+  const k = CRE_KNOBS[cre] ?? CRE_KNOBS[1];
+  if (k.assessCoverage < 0.5) return 'BLOCKED';
+  if (k.capCoverage < 0.8) return 'DEGRADED';
+  return 'OK';
 }
 
 let cache: ReturnType<typeof generate> | null = null;

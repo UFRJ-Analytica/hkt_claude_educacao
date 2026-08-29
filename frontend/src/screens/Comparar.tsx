@@ -1,10 +1,11 @@
 import { Fragment, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { getSchoolMap } from '../api/client';
+import { getSchoolMap, mapOrigin } from '../api/client';
+import { getNetworkSnapshot } from '../api/analytics';
 import type { IndicatorId, SchoolMapFeature } from '../api/types';
 import { INDICATORS, INDICATOR_ORDER, attentionOf, type Attention } from '../domain/indicators';
-import { CRE_NAMES, deriveSnapshot, type CreCell } from '../domain/network';
+import { deriveSnapshot, rowsFromSnapshots, type CreCell } from '../domain/network';
 import { CoverageTicks, Loading, MetricCell, Sparkline } from '../components';
 
 type SortKey = IndicatorId | 'cre' | 'units';
@@ -38,6 +39,22 @@ export default function Comparar() {
 
   const snap = useMemo(() => (map.data ? deriveSnapshot(map.data) : null), [map.data]);
 
+  // Caminho governado: so vale quando o proprio mapa esta usando a API. Misturar
+  // 30 unidades do backend com 1.548 da fixture produziria uma tela incoerente.
+  const governed = useQuery({
+    queryKey: ['governed-rows', map.data?.snapshot_id],
+    enabled: !!map.data && mapOrigin().mode === 'live',
+    queryFn: async () => {
+      const cres = map.data?.available_cres ?? [];
+      const got = await Promise.all(cres.map((c) => getNetworkSnapshot(c)));
+      const pairs = cres
+        .map((cre, i) => ({ cre, snapshot: got[i] }))
+        .filter((p): p is { cre: number; snapshot: NonNullable<typeof p.snapshot> } => p.snapshot !== null);
+      return pairs.length > 0 ? rowsFromSnapshots(pairs) : null;
+    },
+  });
+  const governedRows = governed.data ?? null;
+
   const schoolsByCre = useMemo(() => {
     const m = new Map<number, SchoolMapFeature[]>();
     for (const f of map.data?.features ?? []) {
@@ -51,7 +68,8 @@ export default function Comparar() {
 
   if (!map.data || !snap) return <Loading />;
 
-  const rows = [...snap.rows]
+  const sourceRows = governedRows ?? snap.rows;
+  const rows = [...sourceRows]
     .filter((r) => (creFilter ? r.cre === creFilter : true))
     .sort((a, b) => {
       if (sort === 'cre') return a.cre - b.cre;
@@ -87,7 +105,7 @@ export default function Comparar() {
             <option value="">todas as CREs ({snap.rows.length})</option>
             {snap.rows.map((r) => (
               <option key={r.cre} value={r.cre}>
-                {r.cre}ª CRE · {CRE_NAMES[r.cre]}
+                {r.cre}ª CRE
               </option>
             ))}
           </select>
@@ -105,11 +123,20 @@ export default function Comparar() {
         </span>
       </div>
 
-      <div className="derived">
-        <b>Agregação derivada no cliente.</b> O endpoint governado <span className="mono">GET /api/v1/network/snapshot</span> ainda
-        não existe — até lá, a média por CRE é calculada aqui sobre os valores interpretáveis, e unidades bloqueadas ficam fora do
-        numerador e do denominador. A coluna Leitura mostra a fração de indicadores que a cobertura permitiu ler em cada CRE.
-      </div>
+      {governedRows ? (
+        <div className="derived governed">
+          <b>Agregação governada pelo backend.</b> Os valores vêm de{' '}
+          <span className="mono">GET /api/v1/network/snapshot?cre=</span>, com numerador, denominador e cobertura
+          declarados por observação. Série de 12 meses não faz parte do contrato — por isso a coluna aparece
+          hachurada em vez de desenhar uma linha que o backend não devolveu.
+        </div>
+      ) : (
+        <div className="derived">
+          <b>Agregação derivada no cliente.</b> O endpoint <span className="mono">GET /api/v1/network/snapshot</span>{' '}
+          existe, mas o dataset governado ainda não sustenta a leitura de rede — então a média por CRE é calculada
+          aqui sobre os valores interpretáveis, e unidades bloqueadas ficam fora do numerador e do denominador.
+        </div>
+      )}
 
       <div className="tblwrap">
         <table className="m">
@@ -162,7 +189,7 @@ export default function Comparar() {
                       <button type="button" className="creid" onClick={() => setOpen(expanded ? null : r.cre)}>
                         <b>{r.cre}ª CRE</b>
                         <span>
-                          {expanded ? '▾' : '▸'} {r.units} un · {CRE_NAMES[r.cre]}
+                          {expanded ? '▾' : '▸'} {r.units} un
                         </span>
                       </button>
                     </td>

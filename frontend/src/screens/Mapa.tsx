@@ -1,56 +1,129 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getSchoolMap } from '../api/client';
 import type { IndicatorId, SchoolMapFeature } from '../api/types';
-import { INDICATORS, INDICATOR_ORDER, attentionOf, thresholdLegend } from '../domain/indicators';
-import { CRE_NAMES } from '../domain/network';
-import { centroid, convexHull, makeProjection, shrink, toPath, type Point } from '../domain/geo';
+import { INDICATORS, INDICATOR_ORDER, attentionOf, thresholdLegend, type Attention } from '../domain/indicators';
+import { RIO_SOURCE } from '../domain/rio-geometry';
+import {
+  HOME,
+  clampView,
+  fitPoints,
+  landPath,
+  project,
+  type Frame,
+  type Viewport,
+} from '../domain/projection';
 import { Loading } from '../components';
 
-const W = 1600;
-const H = 640;
-
-const FILL: Record<string, string> = {
+const FILL: Record<Attention, string> = {
   none: 'var(--ink-4)',
   low: 'var(--a1)',
   attention: 'var(--a2)',
   critical: 'var(--a3)',
   degraded: 'var(--a1)',
+  unreadable: 'transparent',
 };
+const ORDER: Attention[] = ['none', 'degraded', 'low', 'attention', 'critical', 'unreadable'];
+
+function easeInOut(t: number) {
+  return t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+}
 
 export default function Mapa() {
   const map = useQuery({ queryKey: ['map'], queryFn: getSchoolMap });
   const [params, setParams] = useSearchParams();
   const [indicator, setIndicator] = useState<IndicatorId>('attendance_rate');
   const [q, setQ] = useState('');
+  const [types, setTypes] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
+  const [hover, setHover] = useState<SchoolMapFeature | null>(null);
+  const [view, setView] = useState<Viewport>(HOME);
+  const [frame, setFrame] = useState<Frame>({ width: 1200, height: 640 });
+
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const drag = useRef<{ x: number; y: number; cx: number; cy: number; moved: boolean } | null>(null);
+  const anim = useRef<number | null>(null);
 
   const creFilter = params.get('cre') ? Number(params.get('cre')) : null;
 
-  const geo = useMemo(() => {
-    if (!map.data) return null;
-    const proj = makeProjection(map.data.features, W, H);
-    const byCre = new Map<number, Point[]>();
-    for (const f of map.data.features) {
-      const p: Point = [proj.x(f.geometry.coordinates[0]), proj.y(f.geometry.coordinates[1])];
-      const l = byCre.get(f.properties.identity.cre);
-      if (l) l.push(p);
-      else byCre.set(f.properties.identity.cre, [p]);
-    }
-    const regions = [...byCre.entries()]
-      .map(([cre, pts]) => {
-        const hull = shrink(convexHull(pts));
-        return { cre, path: toPath(hull), label: centroid(hull) };
-      })
-      .sort((a, b) => a.cre - b.cre);
-    return { proj, regions };
-  }, [map.data]);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) setFrame({ width, height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-  if (!map.data || !geo) return <Loading />;
+  const flyTo = useCallback(
+    (target: Viewport) => {
+      if (anim.current) cancelAnimationFrame(anim.current);
+      const from = view;
+      const t0 = performance.now();
+      const step = (now: number) => {
+        const k = easeInOut(Math.min(1, (now - t0) / 620));
+        setView({
+          cx: from.cx + (target.cx - from.cx) * k,
+          cy: from.cy + (target.cy - from.cy) * k,
+          zoom: from.zoom * (target.zoom / from.zoom) ** k,
+        });
+        if (k < 1) anim.current = requestAnimationFrame(step);
+      };
+      anim.current = requestAnimationFrame(step);
+    },
+    [view],
+  );
+
+  const features = map.data?.features ?? [];
+  const proj = useMemo(() => project(view, frame), [view, frame]);
+
+  /** Tipos de equipamento vindos da release oficial — dado real, nao rotulo nosso. */
+  const typeCatalog = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const f of features) {
+      const t = f.properties.identity.school_type;
+      if (t) m.set(t, (m.get(t) ?? 0) + 1);
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [features]);
+
+  const typeMatch = (f: SchoolMapFeature) =>
+    types.size === 0 || types.has(f.properties.identity.school_type ?? '');
+
+  const byCre = useMemo(() => {
+    const m = new Map<number, SchoolMapFeature[]>();
+    for (const f of features) {
+      const k = f.properties.identity.cre;
+      const l = m.get(k);
+      if (l) l.push(f);
+      else m.set(k, [f]);
+    }
+    return [...m.entries()].sort((a, b) => a[0] - b[0]);
+  }, [features]);
+
+  const focusCre = useCallback(
+    (cre: number | null) => {
+      setSelected(null);
+      setParams(cre ? { cre: String(cre) } : {});
+      if (cre === null) {
+        flyTo(HOME);
+        return;
+      }
+      const pts = features
+        .filter((f) => f.properties.identity.cre === cre)
+        .map((f) => f.geometry.coordinates);
+      flyTo(fitPoints(pts, frame));
+    },
+    [features, frame, flyTo, setParams],
+  );
+
+  if (!map.data) return <Loading />;
 
   const spec = INDICATORS[indicator];
-  const features = map.data.features;
+
   const matches =
     q.trim().length >= 2
       ? features
@@ -60,67 +133,88 @@ export default function Mapa() {
             return (
               id.nome.toLowerCase().includes(t) ||
               (id.bairro ?? '').toLowerCase().includes(t) ||
+              (id.school_type ?? '').toLowerCase().includes(t) ||
               id.school_id.toLowerCase().includes(t) ||
               (id.inep_id ?? '').includes(t) ||
               (id.sme_designation ?? '').includes(t)
             );
           })
-          .slice(0, 8)
+          .slice(0, 7)
       : [];
 
-  const sel = selected ? features.find((f) => f.properties.identity.school_id === selected) : null;
-  const counts = { none: 0, low: 0, attention: 0, critical: 0, degraded: 0, unreadable: 0 };
-  for (const f of features) counts[attentionOf(f.properties.metrics[indicator])] += 1;
+  const sel = selected ? features.find((f) => f.properties.identity.school_id === selected) ?? null : null;
 
-  const dim = (f: SchoolMapFeature) => creFilter !== null && f.properties.identity.cre !== creFilter;
+  const shown = features.filter(typeMatch);
+  const counts: Record<Attention, number> = {
+    none: 0, low: 0, attention: 0, critical: 0, degraded: 0, unreadable: 0,
+  };
+  for (const f of shown) counts[attentionOf(f.properties.metrics[indicator])] += 1;
+
+  // desenha do menos ao mais grave: o que pede atencao fica por cima
+  const ordered = [...shown].sort(
+    (a, b) =>
+      ORDER.indexOf(attentionOf(a.properties.metrics[indicator])) -
+      ORDER.indexOf(attentionOf(b.properties.metrics[indicator])),
+  );
+
+  const onWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const rect = boxRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const anchor = proj.invert(px, py);
+    const next = Math.min(14, Math.max(0.9, view.zoom * Math.exp(-e.deltaY * 0.0016)));
+    const k = next / view.zoom;
+    setView(
+      clampView(
+        {
+          zoom: next,
+          cx: anchor.mx + (view.cx - anchor.mx) / k,
+          cy: anchor.my + (view.cy - anchor.my) / k,
+        },
+        frame,
+      ),
+    );
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    drag.current = { x: e.clientX, y: e.clientY, cx: view.cx, cy: view.cy, moved: false };
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
+    setView(clampView({ zoom: view.zoom, cx: d.cx - dx / proj.scale, cy: d.cy - dy / proj.scale }, frame));
+  };
+  const onPointerUp = () => {
+    drag.current = null;
+  };
+
+  const zoomBy = (k: number) => setView(clampView({ ...view, zoom: view.zoom * k }, frame));
 
   return (
-    <div>
-      <div className="filterbar">
-        <span className="ctl">
-          <span>Indicador</span>
-          <select value={indicator} onChange={(e) => setIndicator(e.target.value as IndicatorId)}>
-            {INDICATOR_ORDER.map((id) => (
-              <option key={id} value={id}>
-                {INDICATORS[id].label}
-              </option>
-            ))}
-          </select>
-        </span>
-        <span className="ctl">
-          <span>Recorte</span>
-          <select value={creFilter ?? ''} onChange={(e) => setParams(e.target.value ? { cre: e.target.value } : {})}>
-            <option value="">todas as CREs</option>
-            {geo.regions.map((r) => (
-              <option key={r.cre} value={r.cre}>
-                {r.cre}ª CRE · {CRE_NAMES[r.cre]}
-              </option>
-            ))}
-          </select>
-        </span>
-        {creFilter && (
-          <Link className="ctl" to={`/comparar?cre=${creFilter}`} style={{ textDecoration: 'underline', textUnderlineOffset: 3 }}>
-            comparar a {creFilter}ª CRE →
-          </Link>
-        )}
-        <span className="right">
-          {map.data.coverage.geolocated.toLocaleString('pt-BR')} no mapa · {map.data.coverage.missing} sem coordenada
-        </span>
-      </div>
-
-      <div className="mapstage">
+    <div className="mapscreen">
+      <aside className="mapside">
         <div className="mapsearch">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" strokeWidth="2.2" aria-hidden="true">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
             <circle cx="11" cy="11" r="7" />
             <path d="M16.5 16.5L21 21" />
           </svg>
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar escola, bairro, INEP ou designação"
+            placeholder="Buscar escola, bairro ou código"
             aria-label="Buscar escola"
           />
-          <span className="kbd">⌘K</span>
+          {q && (
+            <button type="button" className="clear" onClick={() => setQ('')} aria-label="Limpar busca">
+              ×
+            </button>
+          )}
           {matches.length > 0 && (
             <div className="results">
               {matches.map((f) => (
@@ -130,11 +224,12 @@ export default function Mapa() {
                   onClick={() => {
                     setSelected(f.properties.identity.school_id);
                     setQ('');
+                    flyTo(fitPoints([f.geometry.coordinates], frame, 42));
                   }}
                 >
-                  {f.properties.identity.nome}
+                  <span className="rn">{f.properties.identity.nome}</span>
                   <span className="rc">
-                    {f.properties.identity.cre}ª CRE · {f.properties.identity.bairro} · {f.properties.identity.school_id}
+                    {f.properties.identity.cre}ª CRE · {f.properties.identity.school_type ?? f.properties.identity.bairro ?? '—'}
                   </span>
                 </button>
               ))}
@@ -142,139 +237,229 @@ export default function Mapa() {
           )}
         </div>
 
-        <svg className="mapsvg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Mapa da rede por CRE">
-          <rect width={W} height={H} fill="var(--tint)" />
-          {geo.regions.map((r) => (
-            <path
-              key={r.cre}
-              d={r.path}
-              fill={creFilter === r.cre ? 'var(--focus-tint)' : 'var(--paper)'}
-              stroke={creFilter === r.cre ? 'var(--a2)' : 'var(--line-2)'}
-              strokeWidth={creFilter === r.cre ? 1.6 : 1}
-              onClick={() => setParams(creFilter === r.cre ? {} : { cre: String(r.cre) })}
-              style={{ cursor: 'pointer' }}
-            />
-          ))}
-          {geo.regions.map((r) => (
-            <text
-              key={`l-${r.cre}`}
-              x={r.label[0]}
-              y={r.label[1]}
-              textAnchor="middle"
-              fontFamily="IBM Plex Mono, monospace"
-              fontSize="19"
-              fontWeight="500"
-              fill={creFilter === r.cre ? 'var(--a2)' : 'var(--ink-3)'}
-              opacity={creFilter && creFilter !== r.cre ? 0.35 : 0.9}
-              pointerEvents="none"
+        <div className="sectionlabel">Indicador no mapa</div>
+        <div className="segmented">
+          {INDICATOR_ORDER.map((id) => (
+            <button
+              key={id}
+              type="button"
+              className={indicator === id ? 'on' : ''}
+              onClick={() => setIndicator(id)}
             >
-              {r.cre}ª
-            </text>
+              {INDICATORS[id].short}
+            </button>
           ))}
-          {features.map((f) => {
+        </div>
+
+        {typeCatalog.length > 1 && (
+          <>
+            <div className="sectionlabel">
+              Tipo de unidade
+              {types.size > 0 && (
+                <button type="button" className="linkish" onClick={() => setTypes(new Set())}>
+                  limpar
+                </button>
+              )}
+            </div>
+            <div className="typelist">
+              {typeCatalog.map(([t, n]) => (
+                <button
+                  key={t}
+                  type="button"
+                  className={`typerow${types.has(t) ? ' on' : ''}`}
+                  onClick={() => {
+                    const next = new Set(types);
+                    if (next.has(t)) next.delete(t);
+                    else next.add(t);
+                    setTypes(next);
+                  }}
+                >
+                  <span className="tt">{t}</span>
+                  <span className="tn">{n}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        <div className="sectionlabel">
+          Coordenadorias
+          {creFilter && (
+            <button type="button" className="linkish" onClick={() => focusCre(null)}>
+              ver todas
+            </button>
+          )}
+        </div>
+        <div className="crelist">
+          {byCre.map(([cre, list]) => {
+            const scoped = list.filter(typeMatch);
+            const flagged = scoped.filter((f) => {
+              const a = attentionOf(f.properties.metrics[indicator]);
+              return a === 'attention' || a === 'critical';
+            }).length;
+            const share = scoped.length ? flagged / scoped.length : 0;
+            return (
+              <button
+                key={cre}
+                type="button"
+                className={`crerow${creFilter === cre ? ' on' : ''}`}
+                onClick={() => focusCre(creFilter === cre ? null : cre)}
+              >
+                <span className="cn">{cre}ª</span>
+                <span className="cl">
+                  <span className="ct">{scoped.length} unidades</span>
+                  {share > 0 && (
+                    <span className="cb">
+                      <i style={{ width: `${Math.max(6, Math.round(share * 100))}%` }} />
+                    </span>
+                  )}
+                </span>
+                <span className="cv">{flagged || '—'}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="sidenote">
+          A contagem à direita é o número de unidades em atenção ou crítico para o indicador
+          selecionado. Limiares publicados na legenda do mapa.
+        </p>
+      </aside>
+
+      <div
+        className="mapcanvas"
+        ref={boxRef}
+        onWheel={onWheel}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
+      >
+        <svg width={frame.width} height={frame.height} role="img" aria-label="Mapa do município do Rio de Janeiro">
+          <defs>
+            <filter id="landshadow" x="-8%" y="-8%" width="116%" height="116%">
+              <feDropShadow dx="0" dy="3" stdDeviation="7" floodColor="#0e1315" floodOpacity="0.13" />
+            </filter>
+          </defs>
+          <rect width={frame.width} height={frame.height} fill="var(--water)" />
+          <path d={landPath(proj)} fill="var(--land)" stroke="var(--coast)" strokeWidth="1" filter="url(#landshadow)" />
+
+          {ordered.map((f) => {
             const a = attentionOf(f.properties.metrics[indicator]);
-            const cx = geo.proj.x(f.geometry.coordinates[0]);
-            const cy = geo.proj.y(f.geometry.coordinates[1]);
-            const r = 2.6 + Math.min(2.8, (f.properties.enrolment ?? 400) / 400);
-            const faded = dim(f);
-            if (a === 'unreadable') {
-              return (
-                <circle
-                  key={f.properties.identity.school_id}
-                  cx={cx}
-                  cy={cy}
-                  r={r}
-                  fill="none"
-                  stroke="var(--line-3)"
-                  strokeWidth="1.1"
-                  strokeDasharray="2 2"
-                  opacity={faded ? 0.25 : 1}
-                />
-              );
-            }
+            const dim = creFilter !== null && f.properties.identity.cre !== creFilter;
+            const cx = proj.x(f.geometry.coordinates[0]);
+            const cy = proj.y(f.geometry.coordinates[1]);
+            if (cx < -20 || cy < -20 || cx > frame.width + 20 || cy > frame.height + 20) return null;
+            const base = 2.2 + Math.min(3, (f.properties.enrolment ?? 400) / 330);
+            const r = base * Math.min(1.9, 0.85 + view.zoom * 0.16);
+            const isSel = sel?.properties.identity.school_id === f.properties.identity.school_id;
             return (
               <circle
                 key={f.properties.identity.school_id}
                 cx={cx}
                 cy={cy}
                 r={r}
-                fill={FILL[a]}
-                opacity={faded ? 0.18 : a === 'none' ? 0.5 : 1}
-                onClick={() => setSelected(f.properties.identity.school_id)}
-                style={{ cursor: 'pointer' }}
-              >
-                <title>{`${f.properties.identity.nome} — ${spec.label}: ${
-                  f.properties.metrics[indicator]?.value != null ? spec.format(f.properties.metrics[indicator]!.value!) : 'sem leitura'
-                }`}</title>
-              </circle>
+                className={`dot${dim ? ' dim' : ''}${isSel ? ' sel' : ''}`}
+                fill={a === 'unreadable' ? 'none' : FILL[a]}
+                stroke={a === 'unreadable' ? 'var(--line-3)' : 'var(--land)'}
+                strokeWidth={a === 'unreadable' ? 1.1 : 0.7}
+                strokeDasharray={a === 'unreadable' ? '2 2' : undefined}
+                onPointerEnter={() => setHover(f)}
+                onPointerLeave={() => setHover(null)}
+                onClick={() => {
+                  if (!drag.current?.moved) setSelected(f.properties.identity.school_id);
+                }}
+              />
             );
           })}
+
           {sel && (
             <circle
-              cx={geo.proj.x(sel.geometry.coordinates[0])}
-              cy={geo.proj.y(sel.geometry.coordinates[1])}
-              r="11"
+              cx={proj.x(sel.geometry.coordinates[0])}
+              cy={proj.y(sel.geometry.coordinates[1])}
+              r={15}
+              className="selring"
               fill="none"
               stroke="var(--ink)"
-              strokeWidth="1.3"
+              strokeWidth="1.4"
             />
           )}
         </svg>
 
+        {hover && (
+          <div
+            className="maptip"
+            style={{
+              left: Math.min(frame.width - 220, proj.x(hover.geometry.coordinates[0]) + 14),
+              top: Math.max(8, proj.y(hover.geometry.coordinates[1]) - 46),
+            }}
+          >
+            <b>{hover.properties.identity.nome}</b>
+            <span>
+              {spec.label}:{' '}
+              {hover.properties.metrics[indicator]?.value != null
+                ? spec.format(hover.properties.metrics[indicator]!.value!)
+                : 'sem leitura'}
+            </span>
+          </div>
+        )}
+
+        <div className="mapzoom">
+          <button type="button" onClick={() => zoomBy(1.55)} aria-label="Aproximar">+</button>
+          <button type="button" onClick={() => zoomBy(1 / 1.55)} aria-label="Afastar">−</button>
+          <button type="button" onClick={() => flyTo(HOME)} aria-label="Enquadrar cidade">⤢</button>
+        </div>
+
         {sel && (
-          <aside className="mapaside">
-            <div className="k">Escola selecionada</div>
+          <aside className="mapcard">
+            <button type="button" className="cardclose" onClick={() => setSelected(null)} aria-label="Fechar">×</button>
+            <div className="k">Unidade selecionada</div>
             <h5>{sel.properties.identity.nome}</h5>
             <div className="codes">
-              <span>{sel.properties.identity.school_id}</span>
               <span>{sel.properties.identity.cre}ª CRE</span>
-              {sel.properties.identity.bairro && <span>{sel.properties.identity.bairro}</span>}
+              {sel.properties.identity.school_type && <span>{sel.properties.identity.school_type}</span>}
+              {sel.properties.identity.sme_designation && (
+                <span>SME {sel.properties.identity.sme_designation}</span>
+              )}
+              {sel.properties.enrolment && <span>{sel.properties.enrolment} matr.</span>}
             </div>
             {INDICATOR_ORDER.map((id) => {
               const m = sel.properties.metrics[id];
               const blocked = !m || m.value === null;
+              const a = attentionOf(m);
               return (
                 <div className="mrow" key={id}>
                   <span>{INDICATORS[id].label}</span>
-                  <span className={`v${blocked ? ' mut' : ''}`}>
-                    {blocked ? 'sem leitura' : INDICATORS[id].format(m!.value!)}
-                  </span>
+                  <span className={`v a-${a}`}>{blocked ? 'sem leitura' : INDICATORS[id].format(m!.value!)}</span>
                 </div>
               );
             })}
             <Link className="btn" to={`/escola/${sel.properties.identity.school_id}`}>
               Abrir Escola 360
             </Link>
-            <button className="btn ghost" type="button" onClick={() => setSelected(null)}>
-              Limpar seleção
-            </button>
           </aside>
         )}
 
         <div className="maplegend">
-          <span>
-            <i style={{ background: 'var(--ink-4)' }} />
-            sem sinal {counts.none}
-          </span>
-          <span>
-            <i style={{ background: 'var(--a1)' }} />
-            baixa {counts.low + counts.degraded}
-          </span>
-          <span>
-            <i style={{ background: 'var(--a2)' }} />
-            atenção {counts.attention}
-          </span>
-          <span>
-            <i style={{ background: 'var(--a3)' }} />
-            crítico {counts.critical}
-          </span>
-          <span>
-            <i className="hatch" />
-            sem leitura {counts.unreadable}
-          </span>
-          <span className="rule">
-            {spec.label}: {thresholdLegend(spec)} · regiões são o casco convexo dos pontos de cada CRE, não a fronteira oficial
-          </span>
+          <div className="legrow">
+            {(['none', 'low', 'attention', 'critical'] as Attention[]).map((a) => (
+              <span key={a}>
+                <i style={{ background: FILL[a] }} />
+                {a === 'none' ? 'sem sinal' : a === 'low' ? 'baixa' : a === 'attention' ? 'atenção' : 'crítico'}{' '}
+                {counts[a]}
+              </span>
+            ))}
+            <span>
+              <i className="hatch" />
+              sem leitura {counts.unreadable}
+            </span>
+          </div>
+          <div className="legrule">
+            {spec.label} · {thresholdLegend(spec)}
+          </div>
+          <div className="legsrc">
+            {RIO_SOURCE} · {map.data.coverage.geolocated.toLocaleString('pt-BR')} unidades no mapa ·{' '}
+            {map.data.coverage.missing} sem coordenada
+          </div>
         </div>
       </div>
     </div>

@@ -2,19 +2,23 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Path, Query
 from pydantic import ValidationError
 
 from app.core.errors import ERROR_RESPONSES, AppError
 from app.schools.identity_contracts import (
     IdentityLookup,
     IdentityResolutionStatus,
+    OfficialSchoolList,
+    OfficialSchoolListQuery,
+    SchoolContext,
     SchoolIdentityResolution,
 )
 from app.schools.identity_service import (
     IdentityDatasetUnavailableError,
     SchoolIdentityResolver,
 )
+from app.schools.service import SchoolMapService
 
 _IDENTITY_RESPONSES = {
     **ERROR_RESPONSES,
@@ -30,8 +34,54 @@ def _require_resolver(resolver: SchoolIdentityResolver | None) -> SchoolIdentity
     return resolver
 
 
-def build_school_identity_router(resolver: SchoolIdentityResolver | None) -> APIRouter:
+def build_school_identity_router(
+    resolver: SchoolIdentityResolver | None,
+    school_map_service: SchoolMapService | None = None,
+) -> APIRouter:
     router = APIRouter(tags=["school-identity"])
+
+    @router.get(
+        "/schools/official",
+        response_model=OfficialSchoolList,
+        responses=_IDENTITY_RESPONSES,
+        description=(
+            "Lista escolas/equipamentos oficiais da SME/Data.Rio para consumo "
+            "do front: identidade, CRE e coordenadas, sem PII e com proveniência."
+        ),
+    )
+    def list_official_schools(
+        cre: Annotated[int | None, Query(ge=1, le=11)] = None,
+        limit: Annotated[int, Query(ge=1, le=5000)] = 2000,
+        offset: Annotated[int, Query(ge=0)] = 0,
+    ) -> OfficialSchoolList:
+        try:
+            query = OfficialSchoolListQuery(cre=cre, limit=limit, offset=offset)
+        except ValidationError as error:
+            raise AppError("validation_error", "Requisição inválida.", 422) from error
+        try:
+            return _require_resolver(resolver).list_official_schools(query)
+        except IdentityDatasetUnavailableError as error:
+            raise AppError("capability_unavailable", _UNAVAILABLE_MESSAGE, 503) from error
+
+    @router.get(
+        "/schools/{school_id}/context",
+        response_model=SchoolContext,
+        responses=_IDENTITY_RESPONSES,
+        description=(
+            "Abre o painel de uma escola real mesmo quando não há métricas no "
+            "snapshot sintético; inclui links de mapa e comparações quando disponíveis."
+        ),
+    )
+    def get_school_context(
+        school_id: Annotated[
+            str,
+            Path(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$"),
+        ],
+    ) -> SchoolContext:
+        try:
+            return _require_resolver(resolver).get_context(school_id, school_map_service)
+        except IdentityDatasetUnavailableError as error:
+            raise AppError("capability_unavailable", _UNAVAILABLE_MESSAGE, 503) from error
 
     @router.get(
         "/schools/resolve",

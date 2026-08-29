@@ -44,6 +44,29 @@ def test_manifest_captures_all_reproducibility_inputs(tmp_path: Path) -> None:
     assert json.loads(published_manifest) == manifest
 
 
+def test_scenario_release_namespace_keeps_current_pointers_isolated(tmp_path: Path) -> None:
+    output = tmp_path / "generated"
+    default_manifest = generator.generate_mock(output, SCENARIO, allow_external_output=True)
+    namespaced_manifest = generator.generate_mock(
+        output,
+        SCENARIO,
+        allow_external_output=True,
+        release_namespace="scenario",
+    )
+
+    assert default_manifest["release_namespace"] == "default"
+    assert namespaced_manifest["release_namespace"] == "scenario"
+    assert (output / "current.json").is_file()
+    scenario_root = output / "scenarios" / "network_improving"
+    assert (scenario_root / "current.json").is_file()
+    assert _current_release(output) != _current_release(scenario_root)
+    assert DuckDBDataAccess(output, allow_external_root=True).snapshot_id() == default_manifest[
+        "generation_id"
+    ]
+    namespaced_access = DuckDBDataAccess(scenario_root, allow_external_root=True)
+    assert namespaced_access.snapshot_id() == namespaced_manifest["generation_id"]
+
+
 def test_reader_observes_complete_old_or_new_release_during_promotion(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

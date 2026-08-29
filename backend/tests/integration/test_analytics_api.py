@@ -115,6 +115,29 @@ def test_snapshot_ratio_of_sums_cre_and_weighted_assessment(
     assert assessment_observation["value"] == pytest.approx(weighted / participants, rel=1e-12)
 
 
+def test_small_cre_groups_are_suppressed_for_privacy(client: TestClient) -> None:
+    response = client.get("/api/v1/network/snapshot", params={"cre": 9})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["school_count"] == 2
+    for observation in payload["observations"]:
+        assert observation["suppressed"] is True
+        assert observation["suppression_reason"] == "SMALL_GROUP"
+        assert observation["privacy_min_school_count"] == 3
+        assert observation["value"] is None
+        assert observation["numerator"] is None
+        assert observation["denominator"] is None
+        assert observation["quality"] == "BLOCKED"
+        assert observation["interpretable"] is False
+        assert any("grupo pequeno" in item.lower() for item in observation["limitations"])
+
+    evidence_id = payload["observations"][0]["evidence_id"]
+    evidence = client.get(f"/api/v1/evidence/{evidence_id}")
+    assert evidence.status_code == 200
+    assert evidence.json()["observation"] == payload["observations"][0]
+
+
 def test_evidence_round_trip_quality_and_errors(client: TestClient) -> None:
     snapshot = client.get("/api/v1/network/snapshot").json()
     for observation in snapshot["observations"]:

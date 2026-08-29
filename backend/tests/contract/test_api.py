@@ -40,7 +40,7 @@ def test_capabilities_are_sorted_and_have_initial_governed_states(client: TestCl
         "interventions": "DISABLED",
         "learning": "SCHEMA_ONLY",
         "network": "SCHEMA_ONLY",
-        "school-identity": "SCHEMA_ONLY",
+        "school-identity": "AVAILABLE",
         "schools": "SCHEMA_ONLY",
         "staffing": "SCHEMA_ONLY",
     }
