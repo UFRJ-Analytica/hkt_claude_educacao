@@ -1,0 +1,76 @@
+version: 1.0.0
+assets:
+  - &school
+    id: school
+    owner: SME Rio
+    source: official_school_registry
+    status: METADATA_CONFIRMED
+    grain: one row per school
+    keys: [school_id]
+    fields:
+      school_id: string
+      school_name: string
+      inep_id: nullable_string
+      sme_designation: nullable_string
+      cre: integer
+      neighborhood: nullable_string
+      dependency: string
+      school_type: nullable_string
+      latitude: nullable_double
+      longitude: nullable_double
+    provenance: {source_id: official_school_registry, source_kind: METADATA_CONFIRMED, generated: false, limitations: [Operational feed not connected.]}
+    limitations: [Schema only; availability, identifier coverage, and freshness require validation.]
+  - id: assessment
+    owner: SME Rio
+    source: assessment_metadata
+    status: METADATA_CONFIRMED
+    grain: school-period-subject
+    keys: [school_id, period, subject]
+    fields: {school_id: string, period: date, subject: string, score: double, participants: integer, eligible: integer}
+    provenance: {source_id: assessment_metadata, source_kind: KNOWN_UNAVAILABLE, generated: false, limitations: [Operational feed not connected.]}
+    limitations: [Synthetic values do not represent real schools.]
+  - id: attendance
+    owner: SME Rio
+    source: attendance_metadata
+    status: METADATA_CONFIRMED
+    grain: school-month
+    keys: [school_id, period]
+    fields: {school_id: string, period: date, present_count: integer, expected_count: integer}
+    provenance: {source_id: attendance_metadata, source_kind: KNOWN_UNAVAILABLE, generated: false, limitations: [Operational feed not connected.]}
+    limitations: [No individual attendance records are modeled.]
+  - id: movement
+    owner: SME Rio
+    source: movement_metadata
+    status: INFERRED
+    grain: school-month
+    keys: [school_id, period]
+    fields: {school_id: string, period: date, transfers_in: integer, transfers_out: integer}
+    provenance: {source_id: movement_metadata, source_kind: KNOWN_UNAVAILABLE, generated: false, limitations: [Schema inferred for demonstration.]}
+    limitations: [Not generated in the stage 2 dataset.]
+  - id: class_capacity
+    owner: SME Rio
+    source: capacity_metadata
+    status: INFERRED
+    grain: school-period
+    keys: [school_id, period]
+    fields: {school_id: string, period: date, enrolled: integer, capacity: integer}
+    provenance: {source_id: capacity_metadata, source_kind: SYNTHETIC_INFERRED, generated: true, data_version: 1.0.0, generation_seed: 20260826, scenario_reference: "network_improving@1.0.0", limitations: [Schema inferred for demonstration.]}
+    limitations: [Capacity assumptions need official confirmation.]
+  - id: school_dependency
+    owner: SME Rio
+    source: school_metadata
+    status: INFERRED
+    grain: school
+    keys: [school_id]
+    fields: {school_id: string, dependency: string}
+    provenance: {source_id: school_metadata, source_kind: SYNTHETIC_INFERRED, generated: true, data_version: 1.0.0, generation_seed: 20260826, scenario_reference: "network_improving@1.0.0", limitations: [Simplified dependency values.]}
+    limitations: [Embedded in schools output.]
+  - id: teacher_shortage
+    owner: SME Rio
+    source: staffing_metadata
+    status: INFERRED
+    grain: school-period-subject
+    keys: [school_id, period, subject]
+    fields: {school_id: string, period: date, subject: string, shortage_hours: double, required_hours: double}
+    provenance: {source_id: staffing_metadata, source_kind: SYNTHETIC_INFERRED, generated: true, data_version: 1.0.0, generation_seed: 20260826, scenario_reference: "network_improving@1.0.0", limitations: [Schema inferred; no person-level data.]}
+    limitations: [No teacher identities or employment records.]

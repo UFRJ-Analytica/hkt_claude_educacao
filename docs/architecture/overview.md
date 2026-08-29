@@ -54,3 +54,8 @@ adapters: files, DuckDB, SQLite, model provider, map
 Núcleo: saúde, capabilities, proveniência, catálogo, qualidade, privacidade, auditoria e contratos. Domínios: rede, escolas, aprendizagem, frequência, capacidade, staffing, equidade e intervenções. Remover um módulo significa removê-lo do registry/configuração, sem editar o núcleo.
 
 Consulte [contrato de módulos](module-contract.md), [runtime de agentes](agent-runtime.md), [proveniência](data-provenance.md) e [handoff frontend](../api/frontend-handoff.md).
+# Dados locais da Etapa 2
+
+O monólito mantém portas em `app/data_access`, adapter DuckDB read-only sobre Parquet e um
+repositório SQLite separado para o plano de controle. Catálogo, métricas, qualidade e profiler
+não dependem de endpoints de domínio. Dados reais nunca são substituídos silenciosamente por mock.

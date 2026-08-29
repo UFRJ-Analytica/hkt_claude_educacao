@@ -13,9 +13,11 @@ A capability API será a fonte de verdade em runtime para ativação de módulos
 
 `DISABLED` expressa decisão de configuração; `UNAVAILABLE`, ausência de pré-requisito; `DEGRADED`, operação parcial. Nenhum desses estados deve ser silenciosamente convertido em `AVAILABLE`.
 
-## Matriz inicial da Etapa 0
+## Matriz da Etapa 2
 
-Como nenhum backend, frontend ou dataset foi criado, não há capacidade operacional `AVAILABLE` ou `MOCK_ONLY` nesta etapa.
+Por padrão `mock_data_enabled=false`: learning, attendance, capacity e staffing permanecem
+`SCHEMA_ONLY`, mesmo que alguém tenha gerado arquivos localmente. Com configuração explícita
+`PULSO_MOCK_DATA_ENABLED=true`, passam a `MOCK_ONLY`; isso não representa dados reais.
 
 | ID | Capacidade | Estado inicial | Base | Condição para evolução |
 |---|---|---|---|---|

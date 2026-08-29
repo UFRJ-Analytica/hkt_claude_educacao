@@ -1,0 +1,216 @@
+from pathlib import Path
+
+import duckdb
+import pytest
+from fastapi.testclient import TestClient
+
+from app.composition import create_app
+from app.core.config import Settings
+from app.data_access.duckdb_adapter import DuckDBDataAccess
+from scripts.generate_mock import generate_mock
+
+ROOT = Path(__file__).parents[3]
+SCENARIO = ROOT / "data/scenarios/network_improving.yml"
+
+
+class FailingAnalyticsAccess:
+    def __init__(self, delegate: DuckDBDataAccess) -> None:
+        self._delegate = delegate
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._delegate, name)
+
+    def analytics_snapshot(self, *, cre: int | None = None) -> list[dict[str, object]]:
+        raise RuntimeError("secret C:/private/analytics.parquet")
+
+    def analytics_quality(self, *, cre: int | None = None) -> list[dict[str, object]]:
+        raise RuntimeError("secret C:/private/quality.parquet")
+
+
+class EmptyAnalyticsAccess:
+    def __init__(self, delegate: DuckDBDataAccess) -> None:
+        self._delegate = delegate
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._delegate, name)
+
+    def analytics_snapshot(self, *, cre: int | None = None) -> list[dict[str, object]]:
+        return []
+
+
+@pytest.fixture(scope="module")
+def release(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, DuckDBDataAccess]:
+    root = tmp_path_factory.mktemp("analytics") / "generated"
+    generate_mock(root, SCENARIO, allow_external_output=True)
+    return root, DuckDBDataAccess(root, allow_external_root=True)
+
+
+@pytest.fixture(scope="module")
+def client(release: tuple[Path, DuckDBDataAccess]) -> TestClient:
+    return TestClient(
+        create_app(
+            Settings(environment="test", mock_data_enabled=True), data_access=release[1]
+        ),
+        raise_server_exceptions=False,
+    )
+
+
+def test_snapshot_ratio_of_sums_cre_and_weighted_assessment(
+    client: TestClient, release: tuple[Path, DuckDBDataAccess]
+) -> None:
+    response = client.get("/api/v1/network/snapshot", params={"cre": 3})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["api_contract_version"] == "1.0.0"
+    assert payload["scope"] == {"type": "CRE", "id": "3"}
+    assert payload["generated"] is True
+    assert payload["provenance"]["source_kind"] == "SYNTHETIC_INFERRED"
+    assert payload["limitations"]
+    observations = {item["indicator_id"]: item for item in payload["observations"]}
+    assert set(observations) == {
+        "attendance_rate",
+        "assessment_score",
+        "capacity_utilization",
+        "teacher_shortage_rate",
+    }
+
+    root = release[1]._root  # independent SQL against the fixture's immutable release
+    schools = str(root / "schools.parquet").replace("'", "''")
+    attendance = str(root / "attendance_facts.parquet").replace("'", "''")
+    assessment = str(root / "assessment_facts.parquet").replace("'", "''")
+    with duckdb.connect(":memory:") as connection:
+        attendance_row = connection.execute(
+            f"""
+            WITH scope AS (SELECT school_id FROM read_parquet('{schools}') WHERE cre=?),
+            latest AS (SELECT max(period) period FROM read_parquet('{attendance}')
+                       JOIN scope USING(school_id))
+            SELECT sum(f.present_count), sum(f.expected_count), latest.period
+            FROM read_parquet('{attendance}') f JOIN scope USING(school_id), latest
+            WHERE f.period=latest.period GROUP BY latest.period
+            """,
+            [3],
+        ).fetchone()
+        assert attendance_row is not None
+        present, expected, period = attendance_row
+        assessment_row = connection.execute(
+            f"""
+            WITH scope AS (SELECT school_id FROM read_parquet('{schools}') WHERE cre=?),
+            latest AS (SELECT max(period) period FROM read_parquet('{assessment}')
+                       JOIN scope USING(school_id))
+            SELECT sum(f.score*f.participants), sum(f.participants)
+            FROM read_parquet('{assessment}') f JOIN scope USING(school_id), latest
+            WHERE f.period=latest.period
+            """,
+            [3],
+        ).fetchone()
+        assert assessment_row is not None
+        weighted, participants = assessment_row
+    attendance_observation = observations["attendance_rate"]
+    assert attendance_observation["numerator"] == present
+    assert attendance_observation["denominator"] == expected
+    assert attendance_observation["value"] == pytest.approx(present / expected, rel=1e-12)
+    assert attendance_observation["period_start"].startswith(period.isoformat())
+    assessment_observation = observations["assessment_score"]
+    assert assessment_observation["formula_version"] == "weighted-mean-score-v1"
+    assert assessment_observation["value"] == pytest.approx(weighted / participants, rel=1e-12)
+
+
+def test_evidence_round_trip_quality_and_errors(client: TestClient) -> None:
+    snapshot = client.get("/api/v1/network/snapshot").json()
+    for observation in snapshot["observations"]:
+        response = client.get(f"/api/v1/evidence/{observation['evidence_id']}")
+        assert response.status_code == 200
+        evidence = response.json()
+        assert evidence["evidence_id"] == observation["evidence_id"]
+        assert evidence["snapshot_id"] == snapshot["snapshot_id"]
+        assert evidence["observation"] == observation
+
+    quality = client.get("/api/v1/data/quality", params={"cre": 2})
+    assert quality.status_code == 200
+    quality_payload = quality.json()
+    assert quality_payload["scope"] == {"type": "CRE", "id": "2"}
+    assert quality_payload["generated"] is True
+    assert quality_payload["provenance"]["source_kind"] == "SYNTHETIC_INFERRED"
+    assert quality_payload["checks"] == sorted(
+        quality_payload["checks"], key=lambda item: item["check_id"]
+    )
+    assert all(item["coverage_aggregation"] == "mean" for item in quality_payload["checks"])
+    assert all(
+        item["observed_school_count"] <= item["school_count"]
+        for item in quality_payload["checks"]
+    )
+
+    malformed = client.get("/api/v1/evidence/not-an-evidence-id")
+    assert malformed.status_code == 422
+    assert malformed.json()["error"]["code"] == "invalid_evidence_id"
+    unknown_id = snapshot["observations"][0]["evidence_id"].replace(
+        snapshot["snapshot_id"], "0" * 64
+    )
+    unknown = client.get(f"/api/v1/evidence/{unknown_id}")
+    assert unknown.status_code == 404
+    assert "parquet" not in unknown.text.lower()
+
+
+def test_unavailable_modes_and_openapi(
+    release: tuple[Path, DuckDBDataAccess], client: TestClient
+) -> None:
+    for settings in (
+        Settings(environment="test", mock_data_enabled=False),
+        Settings(environment="test", mock_data_enabled=True, disabled_modules={"network"}),
+        Settings(environment="test", mock_data_enabled=True, disabled_modules={"schools"}),
+    ):
+        unavailable = TestClient(
+            create_app(settings, data_access=release[1]), raise_server_exceptions=False
+        )
+        assert unavailable.get("/api/v1/network/snapshot").status_code == 503
+        assert unavailable.get("/api/v1/data/quality").status_code == 503
+
+    schema = client.get("/openapi.json").json()
+    for path in (
+        "/api/v1/network/snapshot",
+        "/api/v1/data/quality",
+        "/api/v1/evidence/{evidence_id}",
+    ):
+        responses = schema["paths"][path]["get"]["responses"]
+        assert {"404", "422", "500", "503"} <= responses.keys()
+        for status in ("404", "422", "500", "503"):
+            model = responses[status]["content"]["application/json"]["schema"]
+            assert model["$ref"].endswith("/ErrorResponse")
+
+
+def test_runtime_failures_are_sanitized_503(
+    release: tuple[Path, DuckDBDataAccess],
+) -> None:
+    app = create_app(
+        Settings(environment="test", mock_data_enabled=True),
+        data_access=FailingAnalyticsAccess(release[1]),  # type: ignore[arg-type]
+    )
+    failing_client = TestClient(app, raise_server_exceptions=False)
+    for path in ("/api/v1/network/snapshot", "/api/v1/data/quality"):
+        response = failing_client.get(path)
+        assert response.status_code == 503
+        assert response.json() == {
+            "error": {
+                "code": "capability_unavailable",
+                "message": "O recurso analítico está indisponível.",
+            }
+        }
+        assert "secret" not in response.text
+
+
+def test_empty_valid_scope_is_404_not_dataset_unavailable(
+    release: tuple[Path, DuckDBDataAccess],
+) -> None:
+    empty = EmptyAnalyticsAccess(release[1])
+    client = TestClient(
+        create_app(
+            Settings(environment="test", mock_data_enabled=True),
+            data_access=empty,  # type: ignore[arg-type]
+        ),
+        raise_server_exceptions=False,
+    )
+    response = client.get("/api/v1/network/snapshot", params={"cre": 11})
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {"code": "analytics_scope_not_found", "message": "Escopo analítico vazio."}
+    }

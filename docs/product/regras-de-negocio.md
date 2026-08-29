@@ -48,3 +48,10 @@ Aplicam-se minimização, finalidade, menor privilégio, pseudonimização quand
 ## Governança de mudanças
 
 Nova regra requer identificador/fórmula, fonte, owner, versão, testes e data de vigência. Alteração incompatível exige migração ou ADR. Exceções temporárias devem ter justificativa, responsável e expiração.
+# Regras de dados da Etapa 2
+
+- missing não é zero;
+- cobertura abaixo de 100% exige limitação; abaixo de 80% degrada e abaixo de 50% bloqueia;
+- observação degradada/bloqueada não pode ser interpretada;
+- sinais de cenários sintéticos são correlações para demonstração, nunca causalidade;
+- nenhum artefato sintético ou de controle contém PII de aluno ou profissional.

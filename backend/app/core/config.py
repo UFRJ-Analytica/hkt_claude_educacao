@@ -1,5 +1,6 @@
 import ipaddress
 import re
+from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import urlsplit
 
@@ -45,6 +46,13 @@ class Settings(BaseSettings):
     service_name: str = "pulso-da-rede-api"
     version: str = "0.1.0"
     environment: str = "local"
+    mock_data_enabled: bool = False
+    intake_root: Path = Path(".intake")
+    intake_catalog_path: Path = Path(".control/intake_catalog.sqlite3")
+    intake_max_bytes: int = Field(default=10_000_000, gt=0)
+    intake_max_descriptors: int = Field(default=1_000, gt=0)
+    intake_max_joins_per_dataset: int = Field(default=100, gt=0)
+    intake_max_audits_per_join: int = Field(default=1_000, gt=0)
     cors_origins: CsvTuple = Field(
         default_factory=lambda: ("http://localhost:3000", "http://localhost:5173")
     )
@@ -85,9 +93,7 @@ class Settings(BaseSettings):
 
     @field_validator("disabled_modules")
     @classmethod
-    def strip_and_reject_blank_disabled_modules(
-        cls, module_ids: frozenset[str]
-    ) -> frozenset[str]:
+    def strip_and_reject_blank_disabled_modules(cls, module_ids: frozenset[str]) -> frozenset[str]:
         cleaned = frozenset(module_id.strip() for module_id in module_ids)
         if any(not module_id for module_id in cleaned):
             raise ValueError("disabled module ids cannot be blank")

@@ -78,9 +78,7 @@ async def validation_error_handler(_request: Request, _exc: RequestValidationErr
 def _safe_http_headers(exc: StarletteHTTPException) -> dict[str, str]:
     if not exc.headers:
         return {}
-    return {
-        key: value for key, value in exc.headers.items() if key.lower() in _SAFE_HTTP_HEADERS
-    }
+    return {key: value for key, value in exc.headers.items() if key.lower() in _SAFE_HTTP_HEADERS}
 
 
 async def http_error_handler(_request: Request, exc: StarletteHTTPException) -> JSONResponse:

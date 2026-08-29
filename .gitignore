@@ -29,10 +29,12 @@ test-results/
 
 # Generated/local data and databases
 data/generated/
+data/official/
 data/private/
 data/personal/
 data/raw/
 uploads/
+backend/.intake/
 *.duckdb
 *.duckdb.wal
 *.sqlite
@@ -41,6 +43,12 @@ uploads/
 *.parquet
 *.csv
 *.xlsx
+
+# Scratch de teste e benchmark (regeneravel, nunca versionar)
+backend/.pytest_tmp*/
+backend/.benchmarks/
+backend/.uv-cache*/
+.generated.lock
 
 # Logs, model payloads, and runtime artifacts
 logs/

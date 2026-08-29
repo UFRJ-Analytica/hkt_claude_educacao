@@ -1,0 +1,8 @@
+version: 1.0.0
+privacy_classification: AGGREGATE_NO_PII
+id: attendance_decline
+label: Queda de frequência
+narrative: Queda sintética correlacionada de frequência sem inferência causal.
+seed: 20260827
+parameters: {attendance_trend: -0.008, assessment_trend: 0.0, capacity_pressure: 0.0, shortage_factor: 1.0, quality_gap: 0.0}
+expected_signals: [attendance_down]

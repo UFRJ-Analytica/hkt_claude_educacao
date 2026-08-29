@@ -9,9 +9,10 @@
 
 A classificação é por asset e observação; combinar fontes não elimina a obrigação de preservar a linhagem. Dados sintéticos recebem badge/watermark e nunca são descritos como resultados reais da rede.
 
-## Envelope mínimo de indicador
+## Contrato executável da Etapa 2
 
-Todo payload futuro contém:
+`DataAsset`, `IndicatorDefinition`, `IndicatorObservation`, `QualityFinding` e `Provenance`
+são modelos Pydantic imutáveis, estritos e com timestamps timezone-aware. Todo indicador contém:
 
 - `source_id` e `source_kind`;
 - `generated` e versão/seed quando sintético;
@@ -34,6 +35,8 @@ Completude, unicidade, integridade referencial, domínios, freshness, cobertura 
 
 ## Mudanças
 
-Carga ou schema novo não substitui silenciosamente a versão anterior. Registrar hash, timestamp, mapeamento aprovado, validações e impacto. Fórmulas versionadas preservam reprodutibilidade. Geradores sintéticos devem aceitar seed e versão e nunca gerar identificadores diretamente atribuíveis.
+Carga ou schema novo não substitui silenciosamente a versão anterior. Registrar hash, timestamp, mapeamento aprovado, validações e impacto. Fórmulas versionadas preservam reprodutibilidade. O manifesto do gerador registra schema,
+contagem, SHA256 e classificação por arquivo. DuckDB recebe somente assets, medidas e operações
+allowlisted; SQLite persiste apenas controle agregado sem PII, com WAL, FKs e transações.
 
 Veja [política de dados](../../data/README.md), [capacidades](../product/capabilities.md) e [privacidade](privacy-and-safety.md).

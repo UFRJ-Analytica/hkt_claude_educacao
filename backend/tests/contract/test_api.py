@@ -39,8 +39,9 @@ def test_capabilities_are_sorted_and_have_initial_governed_states(client: TestCl
         "equity": "DISABLED",
         "interventions": "DISABLED",
         "learning": "SCHEMA_ONLY",
-        "network": "MOCK_ONLY",
-        "schools": "MOCK_ONLY",
+        "network": "SCHEMA_ONLY",
+        "school-identity": "SCHEMA_ONLY",
+        "schools": "SCHEMA_ONLY",
         "staffing": "SCHEMA_ONLY",
     }
     assert all(item["limitations"] for item in payload)
@@ -53,6 +54,24 @@ def test_configuration_cannot_expose_disabled_module_as_available() -> None:
     network = next(item for item in response.json() if item["id"] == "network")
     assert network["status"] == "DISABLED"
     assert network["limitations"]
+
+
+def test_mock_data_setting_is_reflected_by_capabilities_api() -> None:
+    app = create_app(Settings(environment="test", mock_data_enabled=True))
+    response = TestClient(app).get("/api/v1/capabilities")
+
+    statuses = {item["id"]: item["status"] for item in response.json()}
+    assert all(
+        statuses[module_id] == "MOCK_ONLY"
+        for module_id in (
+            "network",
+            "schools",
+            "learning",
+            "attendance",
+            "capacity",
+            "staffing",
+        )
+    )
 
 
 def test_unknown_disabled_module_fails_application_startup() -> None:
@@ -77,9 +96,7 @@ def test_unknown_route_has_sanitized_error(client: TestClient) -> None:
     response = client.get("/does-not-exist")
 
     assert response.status_code == 404
-    assert response.json() == {
-        "error": {"code": "not_found", "message": "Recurso não encontrado."}
-    }
+    assert response.json() == {"error": {"code": "not_found", "message": "Recurso não encontrado."}}
 
 
 def test_method_not_allowed_preserves_safe_allow_header(client: TestClient) -> None:

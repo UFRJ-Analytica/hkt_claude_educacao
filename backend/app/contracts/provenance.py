@@ -2,11 +2,12 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class SourceKind(StrEnum):
     REAL_PUBLIC = "REAL_PUBLIC"
+    METADATA_CONFIRMED = "METADATA_CONFIRMED"
     SYNTHETIC_SCHEMA_FAITHFUL = "SYNTHETIC_SCHEMA_FAITHFUL"
     SYNTHETIC_INFERRED = "SYNTHETIC_INFERRED"
     KNOWN_UNAVAILABLE = "KNOWN_UNAVAILABLE"
@@ -35,6 +36,10 @@ class Provenance(BaseModel):
     source_kind: SourceKind
     generated: bool
     as_of: datetime | None = None
+    data_version: str | None = Field(default=None, min_length=1)
+    generation_seed: int | None = None
+    scenario_reference: str | None = Field(default=None, min_length=1)
+    scenario_hash: str | None = Field(default=None, pattern=r"^[a-fA-F0-9]{64}$")
     limitations: tuple[str, ...] = ()
 
     @field_validator("source_id", mode="before")
@@ -56,6 +61,32 @@ class Provenance(BaseModel):
     @classmethod
     def require_aware_as_of(cls, value: datetime | None) -> datetime | None:
         return None if value is None else _normalize_aware_datetime(value)
+
+    @model_validator(mode="after")
+    def validate_generation_lineage(self) -> "Provenance":
+        synthetic = self.source_kind in {
+            SourceKind.SYNTHETIC_SCHEMA_FAITHFUL,
+            SourceKind.SYNTHETIC_INFERRED,
+        }
+        if self.generated != synthetic:
+            raise ValueError("generated flag must match a synthetic source kind")
+        generation_metadata = (
+            self.generation_seed,
+            self.scenario_reference,
+            self.scenario_hash,
+        )
+        if not self.generated and any(value is not None for value in generation_metadata):
+            raise ValueError("generation metadata is prohibited for non-generated provenance")
+        if synthetic and (
+            not self.data_version
+            or self.generation_seed is None
+            or not self.scenario_reference
+        ):
+            raise ValueError(
+                "generated synthetic provenance requires data_version, generation_seed, "
+                "and scenario_reference"
+            )
+        return self
 
 
 class Premise(BaseModel):

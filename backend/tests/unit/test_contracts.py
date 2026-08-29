@@ -26,6 +26,7 @@ def capability(**overrides: object) -> Capability:
 def test_contract_enums_are_governed_exactly() -> None:
     assert {item.value for item in SourceKind} == {
         "REAL_PUBLIC",
+        "METADATA_CONFIRMED",
         "SYNTHETIC_SCHEMA_FAITHFUL",
         "SYNTHETIC_INFERRED",
         "KNOWN_UNAVAILABLE",

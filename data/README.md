@@ -1,6 +1,7 @@
 # Política do diretório de dados
 
-A Etapa 0 não inclui datasets, fixtures, catálogos ou dados gerados. Este arquivo sustenta o diretório e define o gate para etapas futuras.
+A Etapa 2 inclui catálogos e cenários YAML versionados. Os fatos Parquet continuam locais,
+regeneráveis e ignorados pelo Git.
 
 ## Zonas futuras
 
@@ -8,6 +9,7 @@ A Etapa 0 não inclui datasets, fixtures, catálogos ou dados gerados. Este arqu
 - `reference/`: somente referências públicas aprovadas, com licença/origem;
 - `scenarios/`: definições versionáveis de cenários sintéticos, sem PII;
 - `generated/`: Parquet, DuckDB e resultados regeneráveis; ignorado pelo Git;
+- `official/`: releases locais curadas e content-addressed publicadas pelo time de dados; ignoradas pelo Git e consumidas pelo backend somente em leitura;
 - `private/`, `personal/`, `raw/`: bloqueados para versionamento e não devem ser criados sem governança institucional.
 
 Diretórios vazios não são criados antecipadamente. Cada diretório versionado deverá conter README ou artefato justificável.
@@ -29,7 +31,17 @@ Dados pessoais ou sensíveis, arquivos recebidos do evento, uploads, bancos loca
 
 ## Dados sintéticos
 
-Geradores futuros aceitam seed e versão, são reprodutíveis, validam chaves/domínios, não geram nome/CPF/endereço/coordenada de aluno e rotulam outputs como `SYNTHETIC_SCHEMA_FAITHFUL` ou `SYNTHETIC_INFERRED`. Cenários podem codificar correlações narrativas, nunca alegações sobre a rede real.
+`uv run python -m scripts.generate_mock` (em `backend/`) gera seis Parquets agregados em
+uma release imutável sob `data/generated/releases/`. `data/generated/current.json` é o único
+ponto de promoção: ele é substituído atomicamente somente depois da validação da release
+completa. Leitores internos resolvem esse ponteiro uma vez por instância e, durante uma nova
+geração, continuam vendo integralmente a release anterior ou passam a ver integralmente a nova;
+não dependem de symlink e nunca combinam arquivos de releases diferentes. Releases antigas são
+mantidas para leitores concorrentes já ativos e podem ser removidas apenas com política explícita
+de retenção. Seed + versão do cenário determinam linhas, bytes e SHA256; cada release contém seu
+`manifest.json`.
+Escolas usam IDs, nomes e coordenadas sintéticos plausíveis do município; não há nome, CPF,
+endereço ou coordenada de aluno. Cenários codificam correlações narrativas, nunca causalidade.
 
 ## Remoção e incidente
 
