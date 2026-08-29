@@ -325,3 +325,106 @@ export interface AISchoolActionPlanResponseV1 {
   guardrails: string[];
   policy: AIGovernancePolicyV1;
 }
+
+/* ============================================================
+   Grão de turma, habilidade e aula entregue.
+   Formas especificadas em docs/api/backend-agent-turma-grain-handoff.md.
+   Enquanto o backend não entrega, vêm de fixture — e a tela declara.
+   ============================================================ */
+
+export type TurmaScopeType = ScopeType | 'TURMA';
+
+export interface ObservationDimensions {
+  subject: string | null;
+  grade: string | null;
+  skill_id: string | null;
+  skill_label: string | null;
+  proficiency_level: string | null;
+  period_label: string | null;
+}
+
+/** Indicadores novos previstos na spec, além dos quatro atuais. */
+export type TurmaIndicatorId =
+  | 'assessment_participation'
+  | 'skill_mastery_rate'
+  | 'lessons_delivered_rate';
+
+export interface TurmaSummary {
+  turma_id: string;
+  turma_label: string;
+  grade: string;
+  school_id: string;
+  /** Ausente quando suprimida: contagem pequena não é exposta. */
+  student_count: number | null;
+  suppressed: boolean;
+  suppression_reason: 'SMALL_GROUP' | null;
+  coverage: number;
+  quality: QualityStatus;
+}
+
+export interface TurmaList {
+  school_id: string;
+  turmas: TurmaSummary[];
+  privacy_min_unit_count: number;
+  limitations: string[];
+}
+
+export interface SkillDefinition {
+  skill_id: string;
+  skill_label: string;
+  subject: string;
+}
+
+/** Uma célula da matriz de recomposição. */
+export interface SkillCell {
+  scope_id: string;
+  skill_id: string;
+  value: number | null;
+  quality: QualityStatus;
+  suppressed: boolean;
+  suppression_reason: 'SMALL_GROUP' | null;
+  evidence_id: string | null;
+}
+
+export interface SkillMatrix {
+  /** De onde vieram as células: contrato governado ou fixture local. */
+  origin: 'api' | 'fixture';
+  scope: { type: TurmaScopeType; id: string; label: string };
+  /** Linhas: CREs, escolas ou turmas, conforme o recorte. */
+  rows: { id: string; label: string; sublabel: string; student_count: number | null }[];
+  skills: SkillDefinition[];
+  cells: SkillCell[];
+  period_label: string;
+  privacy_min_unit_count: number;
+  limitations: string[];
+}
+
+/**
+ * Decomposição da aula entregue — quatro estados, não três.
+ *
+ * O campo `id_situacao` de `educacao_basica_frequencia__frq_frequencia` traz
+ * literalmente: 1 aula prevista · 3 excluído · 4 aula dada · 6 aula cancelada.
+ * Isso separa duas coisas que hoje viram uma só na rede: aula CANCELADA é
+ * oferta interrompida; aula PREVISTA que nunca virou dada é registro faltando.
+ *
+ * `lessons_unlogged` não é um valor — é ausência de informação, e a interface
+ * trata como tal (hachura, nunca cor).
+ */
+export interface LessonDelivery {
+  scope_id: string;
+  scope_label: string;
+  lessons_planned: number;
+  /** id_situacao = 4 */
+  lessons_delivered: number;
+  /** id_situacao = 6 — aula não ofertada */
+  lessons_cancelled: number;
+  /** prevista sem par em dada; sinal de diário não lançado */
+  lessons_unlogged: number;
+  /** faltas dentro das aulas efetivamente dadas */
+  student_absences: number;
+  attendance_rate: number;
+  /** dadas × presença ÷ previstas — a aula que chegou ao estudante */
+  effective_rate: number;
+  quality: QualityStatus;
+  origin: 'api' | 'fixture';
+}

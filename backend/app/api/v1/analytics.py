@@ -4,7 +4,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Path, Query
 
-from app.analytics.contracts import DataQualitySummaryV1, EvidenceRecordV1, NetworkSnapshotV1
+from app.analytics.contracts import (
+    DataQualitySummaryV1,
+    EvidenceRecordV1,
+    NetworkSnapshotV1,
+    SchoolTurmaListV1,
+    SkillMatrixV1,
+)
 from app.analytics.service import (
     AnalyticsScopeNotFoundError,
     AnalyticsService,
@@ -37,9 +43,58 @@ def build_analytics_router(service: AnalyticsService | None) -> APIRouter:
     )
     def network_snapshot(
         cre: Annotated[int | None, Query(ge=1, le=11)] = None,
+        school_id: Annotated[
+            str | None,
+            Query(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$"),
+        ] = None,
+        turma_id: Annotated[
+            str | None,
+            Query(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$"),
+        ] = None,
     ) -> NetworkSnapshotV1:
         try:
-            return _service(service).get_snapshot(cre)
+            return _service(service).get_snapshot(cre, school_id, turma_id)
+        except AnalyticsScopeNotFoundError as error:
+            raise AppError(
+                "analytics_scope_not_found", "Escopo analítico vazio.", 404
+            ) from error
+        except AnalyticsUnavailableError as error:
+            raise AppError("capability_unavailable", _UNAVAILABLE, 503) from error
+
+    @router.get(
+        "/schools/{school_id}/turmas",
+        response_model=SchoolTurmaListV1,
+        responses=_ANALYTICS_RESPONSES,
+    )
+    def school_turmas(
+        school_id: Annotated[
+            str,
+            Path(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$"),
+        ],
+    ) -> SchoolTurmaListV1:
+        try:
+            return _service(service).list_school_turmas(school_id)
+        except AnalyticsScopeNotFoundError as error:
+            raise AppError(
+                "analytics_scope_not_found", "Escopo analítico vazio.", 404
+            ) from error
+        except AnalyticsUnavailableError as error:
+            raise AppError("capability_unavailable", _UNAVAILABLE, 503) from error
+
+    @router.get(
+        "/schools/{school_id}/skills",
+        response_model=SkillMatrixV1,
+        responses=_ANALYTICS_RESPONSES,
+    )
+    def school_skills(
+        school_id: Annotated[
+            str,
+            Path(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$"),
+        ],
+        period: Annotated[str | None, Query(min_length=1, max_length=64)] = None,
+    ) -> SkillMatrixV1:
+        try:
+            return _service(service).get_skill_matrix(school_id, period)
         except AnalyticsScopeNotFoundError as error:
             raise AppError(
                 "analytics_scope_not_found", "Escopo analítico vazio.", 404

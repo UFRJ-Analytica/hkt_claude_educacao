@@ -116,6 +116,7 @@ def test_join_openapi_and_restart_persistence(tmp_path: Path) -> None:
         "inep_id",
         "sme_designation",
         "cre_id",
+        "turma_id",
     ]
     assert set(schemas["ApprovalCommand"]["properties"]) == {"reviewed", "basis"}
 

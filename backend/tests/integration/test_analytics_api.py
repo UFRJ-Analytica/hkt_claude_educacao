@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any, cast
 
 import duckdb
 import pytest
@@ -60,24 +61,36 @@ def test_snapshot_ratio_of_sums_cre_and_weighted_assessment(
 ) -> None:
     response = client.get("/api/v1/network/snapshot", params={"cre": 3})
     assert response.status_code == 200
-    payload = response.json()
+    payload = cast(dict[str, Any], response.json())
     assert payload["api_contract_version"] == "1.0.0"
     assert payload["scope"] == {"type": "CRE", "id": "3"}
     assert payload["generated"] is True
     assert payload["provenance"]["source_kind"] == "SYNTHETIC_INFERRED"
     assert payload["limitations"]
-    observations = {item["indicator_id"]: item for item in payload["observations"]}
-    assert set(observations) == {
+    observations_by_indicator: dict[str, list[dict[str, Any]]] = {}
+    for raw_item in payload["observations"]:
+        item = cast(dict[str, Any], raw_item)
+        observations_by_indicator.setdefault(item["indicator_id"], []).append(item)
+    observations = {
+        indicator_id: items[0] for indicator_id, items in observations_by_indicator.items()
+    }
+    assert set(observations_by_indicator) == {
         "attendance_rate",
         "assessment_score",
         "capacity_utilization",
         "teacher_shortage_rate",
+        "subject_grade_mean",
+        "lessons_delivered_rate",
+        "lessons_cancelled_rate",
+        "lessons_unlogged_rate",
     }
 
     root = release[1]._root  # independent SQL against the fixture's immutable release
     schools = str(root / "schools.parquet").replace("'", "''")
     attendance = str(root / "attendance_facts.parquet").replace("'", "''")
     assessment = str(root / "assessment_facts.parquet").replace("'", "''")
+    subject_grades = str(root / "subject_grade_facts.parquet").replace("'", "''")
+    lessons = str(root / "lesson_plans.parquet").replace("'", "''")
     with duckdb.connect(":memory:") as connection:
         attendance_row = connection.execute(
             f"""
@@ -105,6 +118,42 @@ def test_snapshot_ratio_of_sums_cre_and_weighted_assessment(
         ).fetchone()
         assert assessment_row is not None
         weighted, participants = assessment_row
+        subject_grade_row = connection.execute(
+            f"""
+            WITH scope AS (SELECT school_id FROM read_parquet('{schools}') WHERE cre=?),
+            latest AS (SELECT max(period) period FROM read_parquet('{subject_grades}')
+                       JOIN scope USING(school_id))
+            SELECT subject, grade, proficiency_level,
+                   sum(score*participants), sum(participants),
+                   sqrt(sum((proficiency_error_margin*participants)*(proficiency_error_margin*participants)))
+                     / nullif(sum(participants), 0)
+            FROM read_parquet('{subject_grades}') f JOIN scope USING(school_id), latest
+            WHERE f.period=latest.period
+            GROUP BY subject, grade, proficiency_level
+            ORDER BY subject, grade, proficiency_level
+            LIMIT 1
+            """,
+            [3],
+        ).fetchone()
+        assert subject_grade_row is not None
+        sg_subject, sg_grade, sg_level, sg_weighted, sg_participants, sg_error = subject_grade_row
+        lesson_row = connection.execute(
+            f"""
+            WITH scope AS (SELECT school_id FROM read_parquet('{schools}') WHERE cre=?),
+            latest AS (SELECT max(period) period FROM read_parquet('{lessons}')
+                       JOIN scope USING(school_id))
+            SELECT subject, grade, sum(delivered_count), sum(cancelled_count),
+                   sum(unlogged_count), sum(planned_count)
+            FROM read_parquet('{lessons}') f JOIN scope USING(school_id), latest
+            WHERE f.period=latest.period
+            GROUP BY subject, grade
+            ORDER BY subject, grade
+            LIMIT 1
+            """,
+            [3],
+        ).fetchone()
+        assert lesson_row is not None
+        lesson_subject, lesson_grade, delivered, cancelled, unlogged, planned = lesson_row
     attendance_observation = observations["attendance_rate"]
     assert attendance_observation["numerator"] == present
     assert attendance_observation["denominator"] == expected
@@ -113,6 +162,41 @@ def test_snapshot_ratio_of_sums_cre_and_weighted_assessment(
     assessment_observation = observations["assessment_score"]
     assert assessment_observation["formula_version"] == "weighted-mean-score-v1"
     assert assessment_observation["value"] == pytest.approx(weighted / participants, rel=1e-12)
+    subject_grade_observation = next(
+        item
+        for item in observations_by_indicator["subject_grade_mean"]
+        if item["dimensions"]["subject"] == sg_subject
+        and item["dimensions"]["grade"] == sg_grade
+        and item["dimensions"]["proficiency_level"] == sg_level
+    )
+    assert subject_grade_observation["unit"] == "score"
+    assert subject_grade_observation["formula_version"] == "weighted-mean-score-v1"
+    assert subject_grade_observation["value"] == pytest.approx(
+        sg_weighted / sg_participants, rel=1e-12
+    )
+    assert subject_grade_observation["dimensions"]["proficiency_error_margin"] == pytest.approx(
+        sg_error, rel=1e-12
+    )
+    lessons_observations = {
+        item["indicator_id"]: item
+        for indicator in (
+            "lessons_delivered_rate",
+            "lessons_cancelled_rate",
+            "lessons_unlogged_rate",
+        )
+        for item in observations_by_indicator[indicator]
+        if item["dimensions"]["subject"] == lesson_subject
+        and item["dimensions"]["grade"] == lesson_grade
+    }
+    assert lessons_observations["lessons_delivered_rate"]["value"] == pytest.approx(
+        delivered / planned, rel=1e-12
+    )
+    assert lessons_observations["lessons_cancelled_rate"]["value"] == pytest.approx(
+        cancelled / planned, rel=1e-12
+    )
+    assert lessons_observations["lessons_unlogged_rate"]["value"] == pytest.approx(
+        unlogged / planned, rel=1e-12
+    )
 
 
 def test_small_cre_groups_are_suppressed_for_privacy(client: TestClient) -> None:

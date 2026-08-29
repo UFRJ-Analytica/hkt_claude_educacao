@@ -69,6 +69,53 @@ export const INDICATORS: Record<IndicatorId, IndicatorSpec> = {
   },
 };
 
+/**
+ * Acerto por descritor. Não está em `IndicatorId` porque o backend ainda não o
+ * emite; vive à parte até `skill_mastery_rate` entrar no contrato de analytics.
+ * Os limiares seguem a mesma regra dos outros: publicados na legenda da tela.
+ */
+export const SKILL_MASTERY: IndicatorSpec = {
+  id: 'assessment_score' as IndicatorId,
+  label: 'Acerto por descritor',
+  short: 'Acerto',
+  unit: 'ratio',
+  worse: 'low',
+  thresholds: [0.7, 0.55, 0.4],
+  scale: [0.1, 1],
+  format: pct,
+};
+
+/**
+ * Aula entregue: lançadas sobre previstas. Separa aula não ofertada de aluno
+ * ausente — a distinção que a rede hoje não consegue fazer.
+ */
+export const LESSONS_DELIVERED: IndicatorSpec = {
+  id: 'attendance_rate' as IndicatorId,
+  label: 'Aula entregue',
+  short: 'Aula',
+  unit: 'ratio',
+  worse: 'low',
+  thresholds: [0.97, 0.93, 0.88],
+  scale: [0.7, 1],
+  format: pct,
+};
+
+/** Nível visual de um valor solto, com os limiares de um spec qualquer. */
+export function levelFor(spec: IndicatorSpec, value: number | null): Attention {
+  if (value === null) return 'unreadable';
+  const [t1, t2, t3] = spec.thresholds;
+  if (spec.worse === 'low') {
+    if (value < t3) return 'critical';
+    if (value < t2) return 'attention';
+    if (value < t1) return 'low';
+    return 'none';
+  }
+  if (value > t3) return 'critical';
+  if (value > t2) return 'attention';
+  if (value > t1) return 'low';
+  return 'none';
+}
+
 export const INDICATOR_ORDER: IndicatorId[] = [
   'attendance_rate',
   'teacher_shortage_rate',

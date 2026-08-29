@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getSchoolMap, getSituations, mapOrigin } from '../api/client';
+import { getNetworkLessonDelivery } from '../api/turmas';
+import AulaEntregue from '../components/AulaEntregue';
 import { deriveSnapshot } from '../domain/network';
 import { Loading } from '../components';
 
@@ -27,6 +29,7 @@ const LEVEL_LABEL: Record<string, string> = {
 export default function Hoje() {
   const map = useQuery({ queryKey: ['map'], queryFn: getSchoolMap });
   const sits = useQuery({ queryKey: ['situations'], queryFn: getSituations });
+  const lessons = useQuery({ queryKey: ['lessons', 'network'], queryFn: () => getNetworkLessonDelivery(null) });
   const navigate = useNavigate();
 
   if (!map.data || !sits.data) return <Loading />;
@@ -136,6 +139,18 @@ export default function Hoje() {
           );
         })}
       </div>
+
+      {lessons.data && (
+        <div className="lessonblock">
+          <AulaEntregue d={lessons.data} />
+          <p className="lessonorigin mono">
+            Fixture derivada da frequência carregada. O campo <b>id_situacao</b> de
+            educacao_basica_frequencia__frq_frequencia traz os quatro estados —
+            1 prevista, 3 excluído, 4 dada, 6 cancelada — e resolve esta decomposição de forma exata
+            quando o dado entrar.
+          </p>
+        </div>
+      )}
 
       <div className="agentrail">
         {AGENTS.map((a) => (

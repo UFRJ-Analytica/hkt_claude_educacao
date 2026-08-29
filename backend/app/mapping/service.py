@@ -42,6 +42,27 @@ _ALIASES: dict[CanonicalField, frozenset[str]] = {
     CanonicalField.SOURCE_REF: frozenset(
         {"source_ref", "referencia_fonte", "referência_fonte", "fonte_ref"}
     ),
+    CanonicalField.TURMA_ID: frozenset({"turma_id", "id_turma", "turma", "cod_turma"}),
+    CanonicalField.TURMA_LABEL: frozenset({"turma_label", "nome_turma", "turma_nome"}),
+    CanonicalField.GRADE: frozenset({"grade", "ano", "serie", "série", "ano_escolar"}),
+    CanonicalField.SUBJECT: frozenset(
+        {"subject", "disciplina", "componente", "componente_curricular"}
+    ),
+    CanonicalField.SKILL_ID: frozenset(
+        {"skill_id", "habilidade_id", "id_habilidade", "codigo_habilidade", "descritor"}
+    ),
+    CanonicalField.PROFICIENCY_LEVEL: frozenset(
+        {"proficiency_level", "nivel_proficiencia", "nível_proficiência"}
+    ),
+    CanonicalField.LESSONS_PLANNED: frozenset(
+        {"lessons_planned", "aulas_previstas", "aulas_planejadas"}
+    ),
+    CanonicalField.LESSONS_DELIVERED: frozenset(
+        {"lessons_delivered", "aulas_dadas", "aulas_realizadas"}
+    ),
+    CanonicalField.PERIOD_LABEL: frozenset(
+        {"period_label", "bimestre", "rotulo_periodo", "rótulo_período"}
+    ),
 }
 _SEPARATOR = re.compile(r"[^\w]+", flags=re.UNICODE)
 

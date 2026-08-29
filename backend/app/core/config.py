@@ -56,7 +56,12 @@ class Settings(BaseSettings):
     intake_max_joins_per_dataset: int = Field(default=100, gt=0)
     intake_max_audits_per_join: int = Field(default=1_000, gt=0)
     cors_origins: CsvTuple = Field(
-        default_factory=lambda: ("http://localhost:3000", "http://localhost:5173")
+        default_factory=lambda: (
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:5174",
+        )
     )
     disabled_modules: CsvFrozenSet = Field(
         default_factory=lambda: frozenset({"equity", "interventions"})

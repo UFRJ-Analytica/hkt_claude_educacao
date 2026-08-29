@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getSchoolMap } from '../api/client';
+import { getSchoolContext } from '../api/analytics';
 import type { IndicatorId, SchoolMapFeature } from '../api/types';
 import { INDICATORS, INDICATOR_ORDER, attentionOf, thresholdLegend, type Attention } from '../domain/indicators';
 import { RIO_SOURCE } from '../domain/rio-geometry';
@@ -37,6 +38,11 @@ export default function Mapa() {
   const [q, setQ] = useState('');
   const [types, setTypes] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
+  const selectedContext = useQuery({
+    queryKey: ['context', selected],
+    queryFn: () => getSchoolContext(selected!),
+    enabled: selected !== null,
+  });
   const [hover, setHover] = useState<SchoolMapFeature | null>(null);
   const [view, setView] = useState<Viewport>(HOME);
   const [frame, setFrame] = useState<Frame>({ width: 1200, height: 640 });
@@ -77,7 +83,7 @@ export default function Mapa() {
     [view],
   );
 
-  const features = map.data?.features ?? [];
+  const features = useMemo(() => map.data?.features ?? [], [map.data]);
   const proj = useMemo(() => project(view, frame), [view, frame]);
 
   /** Tipos de equipamento vindos da release oficial — dado real, nao rotulo nosso. */
@@ -410,9 +416,9 @@ export default function Mapa() {
         </div>
 
         {sel && (
-          <aside className="mapcard">
+          <aside className="mapcard mapcard-context">
             <button type="button" className="cardclose" onClick={() => setSelected(null)} aria-label="Fechar">×</button>
-            <div className="k">Unidade selecionada</div>
+            <div className="k">Unidade real selecionada</div>
             <h5>{sel.properties.identity.nome}</h5>
             <div className="codes">
               <span>{sel.properties.identity.cre}ª CRE</span>
@@ -420,21 +426,50 @@ export default function Mapa() {
               {sel.properties.identity.sme_designation && (
                 <span>SME {sel.properties.identity.sme_designation}</span>
               )}
-              {sel.properties.enrolment && <span>{sel.properties.enrolment} matr.</span>}
+              <span className="realtag">identidade real</span>
             </div>
-            {INDICATOR_ORDER.map((id) => {
-              const m = sel.properties.metrics[id];
-              const blocked = !m || m.value === null;
-              const a = attentionOf(m);
-              return (
-                <div className="mrow" key={id}>
-                  <span>{INDICATORS[id].label}</span>
-                  <span className={`v a-${a}`}>{blocked ? 'sem leitura' : INDICATORS[id].format(m!.value!)}</span>
-                </div>
-              );
-            })}
-            <Link className="btn" to={`/escola/${sel.properties.identity.school_id}`}>
-              Abrir Escola 360
+
+            <div className={`covermini${selectedContext.data?.metric_coverage.status === 'IDENTITY_ONLY' ? ' identityonly' : ''}`}>
+              <span className="mono">
+                {selectedContext.isFetching
+                  ? 'carregando contexto…'
+                  : selectedContext.data?.metric_coverage.status === 'IDENTITY_ONLY'
+                    ? 'sem indicadores carregados'
+                    : selectedContext.data?.metric_coverage.status === 'SYNTHETIC_SNAPSHOT_MATCHED'
+                      ? 'indicadores de demonstração'
+                      : 'contexto local'}
+              </span>
+              <p>
+                {selectedContext.data?.metric_coverage.message ??
+                  'Identidade, CRE, tipo e coordenada vêm do cadastro real. Abra a Escola 360 para ver cobertura e plano de ação.'}
+              </p>
+            </div>
+
+            <div className="mapactions">
+              {selectedContext.data?.map_links.google_maps_url && (
+                <a
+                  className="btn ghost inline"
+                  href={selectedContext.data.map_links.google_maps_url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  Google Maps
+                </a>
+              )}
+              {selectedContext.data?.map_links.directions_url && (
+                <a
+                  className="btn ghost inline"
+                  href={selectedContext.data.map_links.directions_url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  Rotas
+                </a>
+              )}
+            </div>
+
+            <Link className="btn solid" to={`/escola/${sel.properties.identity.school_id}`}>
+              Abrir Escola 360 + plano IA
             </Link>
           </aside>
         )}

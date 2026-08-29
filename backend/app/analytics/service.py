@@ -11,9 +11,15 @@ from app.analytics.contracts import (
     DataQualitySummaryV1,
     EvidenceRecordV1,
     NetworkSnapshotV1,
+    ObservationDimensions,
     ObservationRecordV1,
     QualityCheckSummaryV1,
+    SchoolTurmaListV1,
     ScopeType,
+    SkillMatrixCellV1,
+    SkillMatrixV1,
+    TurmaIndicatorCoverage,
+    TurmaSummaryV1,
 )
 from app.contracts.data import QualityStatus
 from app.contracts.provenance import Provenance, SourceKind
@@ -47,6 +53,42 @@ _ASSETS: dict[AnalyticsIndicatorId, tuple[str, SourceKind, str, str]] = {
         "ratio-of-sums-v1",
         "ratio",
     ),
+    "assessment_participation": (
+        "assessment_facts.parquet",
+        SourceKind.SYNTHETIC_SCHEMA_FAITHFUL,
+        "ratio-of-sums-v1",
+        "ratio",
+    ),
+    "skill_mastery_rate": (
+        "skill_observations.parquet",
+        SourceKind.SYNTHETIC_SCHEMA_FAITHFUL,
+        "ratio-of-sums-v1",
+        "ratio",
+    ),
+    "lessons_delivered_rate": (
+        "lesson_plans.parquet",
+        SourceKind.SYNTHETIC_SCHEMA_FAITHFUL,
+        "ratio-of-sums-v1",
+        "ratio",
+    ),
+    "subject_grade_mean": (
+        "subject_grade_facts.parquet",
+        SourceKind.SYNTHETIC_SCHEMA_FAITHFUL,
+        "weighted-mean-score-v1",
+        "score",
+    ),
+    "lessons_cancelled_rate": (
+        "lesson_plans.parquet",
+        SourceKind.SYNTHETIC_SCHEMA_FAITHFUL,
+        "ratio-of-sums-v1",
+        "ratio",
+    ),
+    "lessons_unlogged_rate": (
+        "lesson_plans.parquet",
+        SourceKind.SYNTHETIC_SCHEMA_FAITHFUL,
+        "ratio-of-sums-v1",
+        "ratio",
+    ),
 }
 _DERIVATIONS: dict[AnalyticsIndicatorId, str] = {
     "attendance_rate": "sum(present_count) / sum(expected_count) no período mais recente do escopo",
@@ -56,6 +98,24 @@ _DERIVATIONS: dict[AnalyticsIndicatorId, str] = {
     "capacity_utilization": "sum(enrolled) / sum(capacity) no período mais recente do escopo",
     "teacher_shortage_rate": (
         "sum(shortage_hours) / sum(required_hours) no período mais recente do escopo"
+    ),
+    "assessment_participation": (
+        "sum(evaluated_count) / sum(expected_count) no período do escopo"
+    ),
+    "skill_mastery_rate": (
+        "sum(acertos ou domínio da habilidade) / sum(alunos avaliados) por turma/habilidade"
+    ),
+    "lessons_delivered_rate": (
+        "sum(aulas realizadas) / sum(aulas previstas) por turma/período"
+    ),
+    "subject_grade_mean": (
+        "sum(nota da disciplina * participantes) / sum(participantes), em escala 0-10"
+    ),
+    "lessons_cancelled_rate": (
+        "sum(aulas canceladas) / sum(aulas previstas) por turma/período"
+    ),
+    "lessons_unlogged_rate": (
+        "sum(aulas previstas sem lançamento) / sum(aulas previstas) por turma/período"
     ),
 }
 _DATA_ERRORS = (duckdb.Error, OSError, ValueError, RuntimeError, KeyError, TypeError)
@@ -93,6 +153,16 @@ def _number(value: object, name: str) -> float:
     return float(value)
 
 
+def _string_tuple(value: object) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return (value,)
+    if isinstance(value, (list, tuple)):
+        return tuple(str(item) for item in value)
+    raise ValueError("invalid limitations")
+
+
 class AnalyticsService:
     def __init__(self, data_access: DataAccessPort) -> None:
         self._access = data_access
@@ -119,7 +189,17 @@ class AnalyticsService:
         self._scenario_hash = scenario_hash
 
     @staticmethod
-    def _scope(cre: int | None) -> AnalyticsScope:
+    def _scope(
+        cre: int | None,
+        school_id: str | None = None,
+        turma_id: str | None = None,
+    ) -> AnalyticsScope:
+        if turma_id is not None:
+            if school_id is None:
+                raise ValueError("turma scope requires school_id")
+            return AnalyticsScope(type=ScopeType.TURMA, id=f"{school_id}.{turma_id}")
+        if school_id is not None:
+            return AnalyticsScope(type=ScopeType.SCHOOL, id=school_id)
         return AnalyticsScope(
             type=ScopeType.NETWORK if cre is None else ScopeType.CRE,
             id="network" if cre is None else str(cre),
@@ -155,7 +235,8 @@ class AnalyticsService:
         value: float | None = _number(row.get("value"), "value")
         coverage_numerator = _integer(row.get("coverage_numerator"), "coverage numerator")
         coverage_denominator = _integer(row.get("coverage_denominator"), "coverage denominator")
-        suppressed = coverage_denominator < _MIN_PUBLIC_SCHOOL_COUNT
+        min_group_size = _MIN_PUBLIC_SCHOOL_COUNT
+        suppressed = bool(row.get("suppressed", False)) or coverage_denominator < min_group_size
         if suppressed:
             numerator = None
             denominator = None
@@ -170,9 +251,28 @@ class AnalyticsService:
             else QualityStatus.BLOCKED
         )
         scope_token = scope.type.value.lower()
+        dimension_parts = [
+            str(row.get(key)).lower().replace(" ", "-")
+            for key in ("subject", "grade", "skill_id", "proficiency_level")
+            if row.get(key) not in (None, "")
+        ]
+        dimension_token = ":" + ".".join(dimension_parts) if dimension_parts else ""
         identity = (
-            f"{self._snapshot_id}:{scope_token}:{scope.id}:{indicator}:{period.date().isoformat()}"
+            f"{self._snapshot_id}:{scope_token}:{scope.id.lower()}:"
+            f"{indicator}:{period.date().isoformat()}{dimension_token}"
         )
+        raw_dimensions = ObservationDimensions(
+            subject=cast(str | None, row.get("subject")),
+            grade=cast(str | None, row.get("grade")),
+            skill_id=cast(str | None, row.get("skill_id")),
+            skill_label=cast(str | None, row.get("skill_label")),
+            proficiency_level=cast(str | None, row.get("proficiency_level")),
+            proficiency_error_margin=cast(float | None, row.get("proficiency_error_margin")),
+            period_label=cast(str | None, row.get("period_label")),
+        )
+        dimensions: ObservationDimensions | None = raw_dimensions
+        if not any(raw_dimensions.model_dump().values()):
+            dimensions = None
         limitations: tuple[str, ...] = (_SYNTHETIC_LIMITATION,)
         if quality is not QualityStatus.OK:
             limitations += (
@@ -197,16 +297,33 @@ class AnalyticsService:
             interpretable=quality is QualityStatus.OK,
             suppressed=suppressed,
             suppression_reason="SMALL_GROUP" if suppressed else None,
-            privacy_min_school_count=_MIN_PUBLIC_SCHOOL_COUNT,
+            privacy_min_school_count=min_group_size,
+            privacy_min_unit_count=min_group_size,
             formula_version=formula,
             provenance=self._provenance(f"asset:{asset}", source_kind),
             limitations=limitations,
+            dimensions=dimensions,
         )
 
-    def get_snapshot(self, cre: int | None = None) -> NetworkSnapshotV1:
+    def get_snapshot(
+        self,
+        cre: int | None = None,
+        school_id: str | None = None,
+        turma_id: str | None = None,
+    ) -> NetworkSnapshotV1:
         try:
-            scope = self._scope(cre)
-            rows = [dict(row) for row in self._access.analytics_snapshot(cre=cre)]
+            scope = self._scope(cre, school_id, turma_id)
+            if school_id is None and turma_id is None:
+                rows = [dict(row) for row in self._access.analytics_snapshot(cre=cre)]
+            else:
+                rows = [
+                    dict(row)
+                    for row in self._access.analytics_snapshot(
+                        cre=cre,
+                        school_id=school_id,
+                        turma_id=turma_id,
+                    )
+                ]
             if not rows:
                 raise AnalyticsScopeNotFoundError("empty analytics scope")
             observations = tuple(self._observation(row, scope) for row in rows)
@@ -221,6 +338,80 @@ class AnalyticsService:
                 generated=True,
                 provenance=self._provenance(
                     "collection:network-snapshot", SourceKind.SYNTHETIC_INFERRED
+                ),
+                limitations=(_SYNTHETIC_LIMITATION,),
+            )
+        except _DATA_ERRORS as error:
+            raise AnalyticsUnavailableError("analytics unavailable") from error
+
+    def list_school_turmas(self, school_id: str) -> SchoolTurmaListV1:
+        try:
+            turmas = tuple(
+                TurmaSummaryV1(
+                    turma_id=str(row["turma_id"]),
+                    turma_label=cast(str | None, row.get("turma_label")),
+                    grade=cast(str | None, row.get("grade")),
+                    evaluated_count=cast(int | None, row.get("evaluated_count")),
+                    suppressed=bool(row.get("suppressed", False)),
+                    suppression_reason=cast(str | None, row.get("suppression_reason")),
+                    coverage=tuple(
+                        TurmaIndicatorCoverage(
+                            indicator_id=cast(AnalyticsIndicatorId, item["indicator_id"]),
+                            status=QualityStatus(str(item["status"])),
+                        )
+                        for item in cast(list[dict[str, object]], row.get("coverage", []))
+                    ),
+                    limitations=_string_tuple(row.get("limitations")),
+                )
+                for raw in self._access.school_turma_rows(school_id)
+                for row in [dict(raw)]
+            )
+            if not turmas:
+                raise AnalyticsScopeNotFoundError("empty turma scope")
+            return SchoolTurmaListV1(
+                school_id=school_id,
+                turmas=turmas,
+                privacy_min_unit_count=_MIN_PUBLIC_SCHOOL_COUNT,
+                generated=True,
+                provenance=self._provenance(
+                    "collection:school-turmas", SourceKind.SYNTHETIC_INFERRED
+                ),
+                limitations=(_SYNTHETIC_LIMITATION,),
+            )
+        except _DATA_ERRORS as error:
+            raise AnalyticsUnavailableError("analytics unavailable") from error
+
+    def get_skill_matrix(self, school_id: str, period: str | None = None) -> SkillMatrixV1:
+        try:
+            cells = tuple(
+                SkillMatrixCellV1(
+                    turma_id=str(row["turma_id"]),
+                    turma_label=cast(str | None, row.get("turma_label")),
+                    grade=cast(str | None, row.get("grade")),
+                    subject=cast(str | None, row.get("subject")),
+                    skill_id=str(row["skill_id"]),
+                    skill_label=cast(str | None, row.get("skill_label")),
+                    period_label=cast(str | None, row.get("period_label")),
+                    value=cast(float | None, row.get("value")),
+                    quality=QualityStatus(str(row["quality"])),
+                    suppressed=bool(row.get("suppressed", False)),
+                    suppression_reason=cast(str | None, row.get("suppression_reason")),
+                    evidence_id=cast(str | None, row.get("evidence_id")),
+                    limitations=_string_tuple(row.get("limitations")),
+                )
+                for raw in self._access.skill_matrix_rows(school_id, period)
+                for row in [dict(raw)]
+            )
+            if not cells:
+                raise AnalyticsScopeNotFoundError("empty skill matrix")
+            return SkillMatrixV1(
+                school_id=school_id,
+                period=period,
+                cells=cells,
+                privacy_min_unit_count=_MIN_PUBLIC_SCHOOL_COUNT,
+                generated=True,
+                provenance=self._provenance(
+                    "collection:skill-matrix", SourceKind.SYNTHETIC_INFERRED
                 ),
                 limitations=(_SYNTHETIC_LIMITATION,),
             )
@@ -261,33 +452,47 @@ class AnalyticsService:
     def get_evidence(self, evidence_id: str) -> EvidenceRecordV1:
         parts = evidence_id.split(":")
         if (
-            len(parts) != 6
+            len(parts) < 6
             or parts[0] != "ev1"
-            or parts[2] not in {"network", "cre"}
+            or parts[2] not in {"network", "cre", "school", "turma"}
             or parts[4] not in _ASSETS
         ):
             raise MalformedEvidenceIdError("malformed evidence id")
-        _, snapshot, scope_type, scope_id, indicator_value, period_value = parts
+        _, snapshot, scope_type, scope_id, indicator_value, period_value, *_dimensions = parts
         try:
             period = date.fromisoformat(period_value)
         except ValueError as error:
             raise MalformedEvidenceIdError("malformed evidence id") from error
         if snapshot != self._snapshot_id:
             raise EvidenceNotFoundError("evidence not found")
+        school_id: str | None = None
+        turma_id: str | None = None
         if scope_type == "network":
             if scope_id != "network":
                 raise MalformedEvidenceIdError("malformed evidence id")
             cre = None
-        else:
+        elif scope_type == "cre":
             if not scope_id.isdigit() or not 1 <= int(scope_id) <= 11:
                 raise MalformedEvidenceIdError("malformed evidence id")
             cre = int(scope_id)
-        snapshot_record = self.get_snapshot(cre)
+        elif scope_type == "school":
+            cre = None
+            school_id = scope_id.upper()
+        else:
+            split_scope = scope_id.rsplit(".", 1)
+            if len(split_scope) != 2 or not all(split_scope):
+                raise MalformedEvidenceIdError("malformed evidence id")
+            cre = None
+            school_id = split_scope[0].upper()
+            turma_id = split_scope[1]
+        snapshot_record = self.get_snapshot(cre, school_id, turma_id)
         observation = next(
             (
                 item
                 for item in snapshot_record.observations
-                if item.indicator_id == indicator_value and item.period_start.date() == period
+                if item.evidence_id == evidence_id
+                and item.indicator_id == indicator_value
+                and item.period_start.date() == period
             ),
             None,
         )

@@ -259,6 +259,8 @@ def _build_staged_dataset(
         )
         _insert_rows(connection, "schools", schools, staging)
         assessment: _Rows = []
+        subject_grades: _Rows = []
+        lesson_plans: _Rows = []
         attendance: _Rows = []
         capacity: _Rows = []
         shortage: _Rows = []
@@ -288,6 +290,51 @@ def _build_staged_dataset(
                     assessment.append(
                         (school_id, period, subject, round(score, 2), participants, eligible)
                     )
+                    coc_score = min(
+                        10.0,
+                        max(
+                            0.0,
+                            5.8
+                            + school_index * 0.03
+                            + subject_index * 0.25
+                            + p.assessment_trend * month / 45,
+                        ),
+                    )
+                    proficiency_level = (
+                        "adequado"
+                        if coc_score >= 7.0
+                        else "basico"
+                        if coc_score >= 5.0
+                        else "critico"
+                    )
+                    subject_grades.append(
+                        (
+                            school_id,
+                            period,
+                            subject,
+                            "5",
+                            round(coc_score, 2),
+                            participants,
+                            proficiency_level,
+                            round(0.25 + ((school_index + month + subject_index) % 5) * 0.03, 2),
+                        )
+                    )
+                    planned = 18 + ((school_index + month + subject_index) % 5)
+                    cancelled = (school_index + month + subject_index) % 3
+                    unlogged = (school_index + month + subject_index + 1) % 3
+                    delivered = max(planned - cancelled - unlogged, 0)
+                    lesson_plans.append(
+                        (
+                            school_id,
+                            period,
+                            subject,
+                            "5",
+                            planned,
+                            delivered,
+                            cancelled,
+                            unlogged,
+                        )
+                    )
                     required = 160.0
                     missing = (school_index + month + subject_index) % 9 * p.shortage_factor
                     shortage.append((school_id, period, subject, round(missing, 2), required))
@@ -305,6 +352,17 @@ def _build_staged_dataset(
                 "school_id VARCHAR, period DATE, subject VARCHAR, score DOUBLE, "
                 "participants INTEGER, eligible INTEGER",
                 assessment,
+            ),
+            "subject_grade_facts": (
+                "school_id VARCHAR, period DATE, subject VARCHAR, grade VARCHAR, score DOUBLE, "
+                "participants INTEGER, proficiency_level VARCHAR, proficiency_error_margin DOUBLE",
+                subject_grades,
+            ),
+            "lesson_plans": (
+                "school_id VARCHAR, period DATE, subject VARCHAR, grade VARCHAR, "
+                "planned_count INTEGER, delivered_count INTEGER, cancelled_count INTEGER, "
+                "unlogged_count INTEGER",
+                lesson_plans,
             ),
             "attendance_facts": (
                 "school_id VARCHAR, period DATE, present_count INTEGER, expected_count INTEGER",

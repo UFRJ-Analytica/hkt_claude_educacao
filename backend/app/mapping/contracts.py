@@ -22,6 +22,15 @@ class CanonicalField(StrEnum):
     NUMERATOR = "numerator"
     DENOMINATOR = "denominator"
     SOURCE_REF = "source_ref"
+    TURMA_ID = "turma_id"
+    TURMA_LABEL = "turma_label"
+    GRADE = "grade"
+    SUBJECT = "subject"
+    SKILL_ID = "skill_id"
+    PROFICIENCY_LEVEL = "proficiency_level"
+    LESSONS_PLANNED = "lessons_planned"
+    LESSONS_DELIVERED = "lessons_delivered"
+    PERIOD_LABEL = "period_label"
 
 
 class JoinTargetField(StrEnum):
@@ -31,6 +40,7 @@ class JoinTargetField(StrEnum):
     INEP_ID = "inep_id"
     SME_DESIGNATION = "sme_designation"
     CRE_ID = "cre_id"
+    TURMA_ID = "turma_id"
 
 
 class MatchKind(StrEnum):

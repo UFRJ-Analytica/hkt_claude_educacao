@@ -193,7 +193,7 @@ def test_parquet_hashes_remain_deterministic(tmp_path: Path) -> None:
     first = generator.generate_mock(tmp_path / "one", SCENARIO, allow_external_output=True)
     second = generator.generate_mock(tmp_path / "two", SCENARIO, allow_external_output=True)
 
-    assert len(first["files"]) == 6
+    assert len(first["files"]) == 8
     assert {name: value["sha256"] for name, value in first["files"].items()} == {
         name: value["sha256"] for name, value in second["files"].items()
     }

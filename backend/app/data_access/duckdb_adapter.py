@@ -17,6 +17,13 @@ from app.schools.contracts import MapBounds
 
 _TABLE_COLUMNS = {
     "assessment_facts": {"score", "participants", "eligible"},
+    "subject_grade_facts": {"score", "participants", "proficiency_error_margin"},
+    "lesson_plans": {
+        "planned_count",
+        "delivered_count",
+        "cancelled_count",
+        "unlogged_count",
+    },
     "attendance_facts": {"present_count", "expected_count"},
     "capacity_facts": {"enrolled", "capacity"},
     "teacher_shortage_facts": {"shortage_hours", "required_hours"},
@@ -369,24 +376,43 @@ LEFT JOIN q USING (school_id)
         return rows[0] if rows else None
 
     @staticmethod
-    def _analytics_scope(cre: int | None) -> tuple[str, list[object]]:
+    def _analytics_scope(
+        cre: int | None,
+        school_id: str | None = None,
+        turma_id: str | None = None,
+    ) -> tuple[str, list[object]]:
+        if turma_id is not None:
+            if school_id is None:
+                raise ValueError("turma scope requires school_id")
+            return " WHERE school_id = ?", [school_id]
+        if school_id is not None:
+            return " WHERE school_id = ?", [school_id]
         if cre is None:
             return "", []
         if isinstance(cre, bool) or not 1 <= cre <= 11:
             raise ValueError("invalid CRE")
         return " WHERE cre = ?", [cre]
 
-    def analytics_snapshot(self, *, cre: int | None = None) -> list[dict[str, Any]]:
+    def analytics_snapshot(
+        self,
+        *,
+        cre: int | None = None,
+        school_id: str | None = None,
+        turma_id: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Aggregate current scope periods without accepting SQL identifiers from callers.
 
-        Assessment is weighted by participants; the other metrics are ratios of sums.
+        Assessment and COC grades are weighted by participants; lesson indicators
+        decompose planned classes into delivered, cancelled and unlogged shares.
         """
         schools = str(self._asset_path("schools", allow_schools=True)).replace("'", "''")
         attendance = self._asset("attendance_facts")
         assessment = self._asset("assessment_facts")
+        subject_grades = self._asset("subject_grade_facts")
+        lessons = self._asset("lesson_plans")
         capacity = self._asset("capacity_facts")
         staffing = self._asset("teacher_shortage_facts")
-        where, parameters = self._analytics_scope(cre)
+        where, parameters = self._analytics_scope(cre, school_id, turma_id)
         query = f"""
 WITH scope AS (
   SELECT school_id FROM read_parquet('{schools}'){where}
@@ -403,6 +429,45 @@ x AS (SELECT 'assessment_score' indicator_id, p period,
              count(DISTINCT school_id) FILTER (WHERE participants > 0)::BIGINT covered
       FROM read_parquet('{assessment}') JOIN scope USING(school_id), x_period
       WHERE period=p GROUP BY p),
+sg_period AS (
+  SELECT max(period) p FROM read_parquet('{subject_grades}') JOIN scope USING(school_id)
+),
+sg AS (SELECT 'subject_grade_mean' indicator_id, p period,
+              sum(score * participants)::DOUBLE numerator, sum(participants)::DOUBLE denominator,
+              count(DISTINCT school_id) FILTER (WHERE participants > 0)::BIGINT covered,
+              subject, grade, proficiency_level,
+              sqrt(sum(
+                (proficiency_error_margin * participants)
+                * (proficiency_error_margin * participants)
+              ))::DOUBLE / nullif(sum(participants), 0) proficiency_error_margin,
+              'COC ' || strftime(p, '%Y-%m') period_label
+      FROM read_parquet('{subject_grades}') JOIN scope USING(school_id), sg_period
+      WHERE period=p GROUP BY p, subject, grade, proficiency_level),
+lp_period AS (SELECT max(period) p FROM read_parquet('{lessons}') JOIN scope USING(school_id)),
+ld AS (SELECT 'lessons_delivered_rate' indicator_id, p period,
+              sum(delivered_count)::DOUBLE numerator, sum(planned_count)::DOUBLE denominator,
+              count(DISTINCT school_id) FILTER (WHERE planned_count > 0)::BIGINT covered,
+              subject, grade, NULL::VARCHAR proficiency_level,
+              NULL::DOUBLE proficiency_error_margin,
+              strftime(p, '%Y-%m') period_label
+      FROM read_parquet('{lessons}') JOIN scope USING(school_id), lp_period
+      WHERE period=p GROUP BY p, subject, grade),
+lc AS (SELECT 'lessons_cancelled_rate' indicator_id, p period,
+              sum(cancelled_count)::DOUBLE numerator, sum(planned_count)::DOUBLE denominator,
+              count(DISTINCT school_id) FILTER (WHERE planned_count > 0)::BIGINT covered,
+              subject, grade, NULL::VARCHAR proficiency_level,
+              NULL::DOUBLE proficiency_error_margin,
+              strftime(p, '%Y-%m') period_label
+      FROM read_parquet('{lessons}') JOIN scope USING(school_id), lp_period
+      WHERE period=p GROUP BY p, subject, grade),
+lu AS (SELECT 'lessons_unlogged_rate' indicator_id, p period,
+              sum(unlogged_count)::DOUBLE numerator, sum(planned_count)::DOUBLE denominator,
+              count(DISTINCT school_id) FILTER (WHERE planned_count > 0)::BIGINT covered,
+              subject, grade, NULL::VARCHAR proficiency_level,
+              NULL::DOUBLE proficiency_error_margin,
+              strftime(p, '%Y-%m') period_label
+      FROM read_parquet('{lessons}') JOIN scope USING(school_id), lp_period
+      WHERE period=p GROUP BY p, subject, grade),
 c_period AS (SELECT max(period) p FROM read_parquet('{capacity}') JOIN scope USING(school_id)),
 c AS (SELECT 'capacity_utilization' indicator_id, p period,
              sum(enrolled)::DOUBLE numerator, sum(capacity)::DOUBLE denominator,
@@ -416,11 +481,27 @@ t AS (SELECT 'teacher_shortage_rate' indicator_id, p period,
       FROM read_parquet('{staffing}') JOIN scope USING(school_id), t_period
       WHERE period=p GROUP BY p),
 metrics AS (
-  SELECT * FROM a UNION ALL SELECT * FROM x UNION ALL SELECT * FROM c UNION ALL SELECT * FROM t
+  SELECT indicator_id, period, numerator, denominator, covered,
+         NULL::VARCHAR subject, NULL::VARCHAR grade, NULL::VARCHAR proficiency_level,
+         NULL::DOUBLE proficiency_error_margin, NULL::VARCHAR period_label FROM a
+  UNION ALL SELECT indicator_id, period, numerator, denominator, covered,
+         NULL::VARCHAR subject, NULL::VARCHAR grade, NULL::VARCHAR proficiency_level,
+         NULL::DOUBLE proficiency_error_margin, NULL::VARCHAR period_label FROM x
+  UNION ALL SELECT * FROM sg
+  UNION ALL SELECT * FROM ld
+  UNION ALL SELECT * FROM lc
+  UNION ALL SELECT * FROM lu
+  UNION ALL SELECT indicator_id, period, numerator, denominator, covered,
+         NULL::VARCHAR subject, NULL::VARCHAR grade, NULL::VARCHAR proficiency_level,
+         NULL::DOUBLE proficiency_error_margin, NULL::VARCHAR period_label FROM c
+  UNION ALL SELECT indicator_id, period, numerator, denominator, covered,
+         NULL::VARCHAR subject, NULL::VARCHAR grade, NULL::VARCHAR proficiency_level,
+         NULL::DOUBLE proficiency_error_margin, NULL::VARCHAR period_label FROM t
 )
 SELECT indicator_id, period, numerator, denominator,
        numerator / nullif(denominator, 0) AS "value", covered AS coverage_numerator,
-       school_total.n coverage_denominator, school_total.n school_count
+       school_total.n coverage_denominator, school_total.n school_count,
+       subject, grade, proficiency_level, proficiency_error_margin, period_label
 FROM metrics CROSS JOIN school_total ORDER BY indicator_id
 """
         with duckdb.connect(":memory:") as connection:
@@ -449,6 +530,14 @@ GROUP BY check_id, scope_total.n ORDER BY check_id
 """
         with duckdb.connect(":memory:") as connection:
             return self._rows(connection.execute(query, parameters))
+
+    def school_turma_rows(self, school_id: str) -> list[dict[str, Any]]:
+        _ = school_id
+        return []
+
+    def skill_matrix_rows(self, school_id: str, period: str | None) -> list[dict[str, Any]]:
+        _ = (school_id, period)
+        return []
 
     def aggregate(self, asset: str, measure: str, operation: str) -> float | None:
         if (

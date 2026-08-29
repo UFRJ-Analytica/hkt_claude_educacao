@@ -9,6 +9,8 @@ import Mapa from './screens/Mapa';
 import Escola from './screens/Escola';
 import Unidade from './screens/Unidade';
 import Professor from './screens/Professor';
+import Recomposicao from './screens/Recomposicao';
+import Fluxo from './screens/Fluxo';
 import Dados from './screens/Dados';
 import Copiloto from './Copiloto';
 import { ROLES, useRole } from './roles';
@@ -128,6 +130,8 @@ export default function App() {
               path="/mapa"
               element={schoolsUsable ? <Mapa /> : <CapabilityState capability={byId.get('schools')} screen="mapa" />}
             />
+            <Route path="/recomposicao" element={schoolsUsable ? <Recomposicao /> : <CapabilityState capability={byId.get('learning')} screen="recomposicao" />} />
+            <Route path="/fluxo" element={schoolsUsable ? <Fluxo /> : <CapabilityState capability={byId.get('network')} screen="fluxo" />} />
             <Route path="/unidade" element={<Unidade />} />
             <Route path="/escola/:id" element={<Escola />} />
             <Route path="/professor" element={<Professor />} />

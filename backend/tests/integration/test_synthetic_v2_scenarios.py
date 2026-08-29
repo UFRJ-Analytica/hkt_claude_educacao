@@ -36,4 +36,8 @@ def test_reinforcement_priority_v2_generates_scenario_scoped_release(tmp_path: P
         "assessment_score",
         "capacity_utilization",
         "teacher_shortage_rate",
+        "subject_grade_mean",
+        "lessons_delivered_rate",
+        "lessons_cancelled_rate",
+        "lessons_unlogged_rate",
     }

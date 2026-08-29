@@ -29,6 +29,8 @@ export const ROLES: RoleDef[] = [
     routes: [
       { path: '/hoje', label: 'Hoje', capability: 'network' },
       { path: '/comparar', label: 'Comparar', capability: 'schools' },
+      { path: '/recomposicao', label: 'Recomposição', capability: 'learning' },
+      { path: '/fluxo', label: 'Fluxo', capability: 'network' },
       { path: '/mapa', label: 'Mapa', capability: 'schools' },
       { path: '/dados', label: 'Dados', capability: null },
     ],
@@ -41,6 +43,7 @@ export const ROLES: RoleDef[] = [
     note: 'A mesma tela serve ao diretor e à SME: é onde a dor da unidade aparece consolidada.',
     routes: [
       { path: '/unidade', label: 'Minha escola', capability: 'schools' },
+      { path: '/recomposicao', label: 'Recomposição', capability: 'learning' },
       { path: '/comparar', label: 'Pares', capability: 'schools' },
       { path: '/dados', label: 'Dados', capability: null },
     ],

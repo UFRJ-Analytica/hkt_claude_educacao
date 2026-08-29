@@ -16,6 +16,12 @@ AnalyticsIndicatorId = Literal[
     "assessment_score",
     "capacity_utilization",
     "teacher_shortage_rate",
+    "assessment_participation",
+    "skill_mastery_rate",
+    "lessons_delivered_rate",
+    "subject_grade_mean",
+    "lessons_cancelled_rate",
+    "lessons_unlogged_rate",
 ]
 _SYNTHETIC = {SourceKind.SYNTHETIC_SCHEMA_FAITHFUL, SourceKind.SYNTHETIC_INFERRED}
 _FORMULAS: dict[str, frozenset[str]] = {
@@ -23,6 +29,12 @@ _FORMULAS: dict[str, frozenset[str]] = {
     "assessment_score": frozenset({"weighted-mean-score-v1"}),
     "capacity_utilization": frozenset({"ratio-of-sums-v1"}),
     "teacher_shortage_rate": frozenset({"ratio-of-sums-v1"}),
+    "assessment_participation": frozenset({"ratio-of-sums-v1"}),
+    "skill_mastery_rate": frozenset({"ratio-of-sums-v1"}),
+    "lessons_delivered_rate": frozenset({"ratio-of-sums-v1"}),
+    "subject_grade_mean": frozenset({"weighted-mean-score-v1"}),
+    "lessons_cancelled_rate": frozenset({"ratio-of-sums-v1"}),
+    "lessons_unlogged_rate": frozenset({"ratio-of-sums-v1"}),
 }
 
 
@@ -30,6 +42,7 @@ class ScopeType(StrEnum):
     NETWORK = "NETWORK"
     CRE = "CRE"
     SCHOOL = "SCHOOL"
+    TURMA = "TURMA"
 
 
 class AnalyticsScope(StrictModel):
@@ -42,6 +55,36 @@ class AnalyticsScope(StrictModel):
             raise ValueError("NETWORK scope id must be network")
         if self.type is ScopeType.CRE and (not self.id.isdigit() or not 1 <= int(self.id) <= 11):
             raise ValueError("CRE scope id must be between 1 and 11")
+        if self.type is ScopeType.TURMA:
+            parts = self.id.rsplit(".", 1)
+            if len(parts) != 2 or not all(parts):
+                raise ValueError("TURMA scope id must be <school_id>.<turma_id>")
+        return self
+
+
+class ObservationDimensions(StrictModel):
+    subject: str | None = None
+    grade: str | None = None
+    skill_id: str | None = None
+    skill_label: str | None = None
+    proficiency_level: str | None = None
+    proficiency_error_margin: float | None = Field(default=None, ge=0)
+    period_label: str | None = None
+
+    @field_validator("proficiency_error_margin")
+    @classmethod
+    def finite_error_margin(cls, value: float | None) -> float | None:
+        if value is not None and not math.isfinite(value):
+            raise ValueError("proficiency_error_margin must be finite")
+        return value
+
+    @model_validator(mode="after")
+    def no_test_item_content(self) -> "ObservationDimensions":
+        if self.skill_label is not None and any(
+            token in self.skill_label.casefold()
+            for token in ("enunciado", "item ", "questão", "questao")
+        ):
+            raise ValueError("skill_label must not expose test item content")
         return self
 
 
@@ -64,9 +107,11 @@ class ObservationRecordV1(StrictModel):
     suppressed: bool = False
     suppression_reason: Literal["SMALL_GROUP"] | None = None
     privacy_min_school_count: int = Field(default=3, ge=2)
+    privacy_min_unit_count: int = Field(default=3, ge=2)
     formula_version: str = Field(min_length=1)
     provenance: Provenance
     limitations: tuple[str, ...] = ()
+    dimensions: ObservationDimensions | None = None
 
     @field_validator(
         "value", "numerator", "denominator", mode="after"
@@ -95,6 +140,8 @@ class ObservationRecordV1(StrictModel):
     def invariants(self) -> "ObservationRecordV1":
         if self.period_start > self.period_end:
             raise ValueError("period_start must not be after period_end")
+        if self.privacy_min_school_count != self.privacy_min_unit_count:
+            raise ValueError("privacy minimum aliases must match")
         if self.coverage_numerator > self.coverage_denominator:
             raise ValueError("coverage numerator cannot exceed denominator")
         if (self.numerator is None) is not (self.denominator is None):
@@ -144,12 +191,89 @@ class NetworkSnapshotV1(StrictModel):
             raise ValueError("generated must match provenance")
         if self.provenance.data_version != self.snapshot_id:
             raise ValueError("snapshot must match provenance")
-        indicator_count = len({item.indicator_id for item in self.observations})
-        if len(self.observations) != 4 or indicator_count != 4:
-            raise ValueError("network snapshot requires exactly the four current indicators")
+        observation_count = len({item.observation_id for item in self.observations})
+        if not self.observations or observation_count != len(self.observations):
+            raise ValueError("network snapshot requires unique observations")
         if any(item.scope != self.scope for item in self.observations):
             raise ValueError("observation scope must match envelope scope")
         return self
+
+
+class TurmaIndicatorCoverage(StrictModel):
+    indicator_id: AnalyticsIndicatorId
+    status: QualityStatus
+
+
+class TurmaSummaryV1(StrictModel):
+    turma_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+    turma_label: str | None = Field(default=None, max_length=128)
+    grade: str | None = Field(default=None, max_length=64)
+    evaluated_count: int | None = Field(default=None, ge=0)
+    suppressed: bool = False
+    suppression_reason: Literal["SMALL_GROUP"] | None = None
+    coverage: tuple[TurmaIndicatorCoverage, ...] = ()
+    limitations: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def privacy_contract(self) -> "TurmaSummaryV1":
+        if self.suppressed:
+            if self.suppression_reason != "SMALL_GROUP":
+                raise ValueError("suppressed turmas require a reason")
+            if self.evaluated_count is not None:
+                raise ValueError("suppressed turmas cannot expose evaluated_count")
+            if not self.limitations:
+                raise ValueError("suppressed turmas require limitations")
+        elif self.suppression_reason is not None:
+            raise ValueError("unsuppressed turmas cannot include suppression_reason")
+        return self
+
+
+class SchoolTurmaListV1(StrictModel):
+    api_contract_version: ApiContractVersion = "1.0.0"
+    school_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+    turmas: tuple[TurmaSummaryV1, ...]
+    privacy_min_unit_count: int = Field(default=3, ge=2)
+    generated: bool
+    provenance: Provenance
+    limitations: tuple[str, ...] = Field(min_length=1)
+
+
+class SkillMatrixCellV1(StrictModel):
+    turma_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+    turma_label: str | None = Field(default=None, max_length=128)
+    grade: str | None = Field(default=None, max_length=64)
+    subject: str | None = Field(default=None, max_length=64)
+    skill_id: str = Field(min_length=1, max_length=64)
+    skill_label: str | None = Field(default=None, max_length=256)
+    period_label: str | None = Field(default=None, max_length=64)
+    value: float | None = Field(default=None, ge=0, le=1)
+    quality: QualityStatus
+    suppressed: bool = False
+    suppression_reason: Literal["SMALL_GROUP"] | None = None
+    evidence_id: str | None = Field(default=None, pattern=r"^ev1:[a-z0-9:._-]+$")
+    limitations: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def cell_privacy_contract(self) -> "SkillMatrixCellV1":
+        if self.suppressed:
+            if self.value is not None:
+                raise ValueError("suppressed skill cells cannot expose value")
+            if self.suppression_reason != "SMALL_GROUP":
+                raise ValueError("suppressed skill cells require reason")
+        elif self.suppression_reason is not None:
+            raise ValueError("unsuppressed skill cells cannot include suppression_reason")
+        return self
+
+
+class SkillMatrixV1(StrictModel):
+    api_contract_version: ApiContractVersion = "1.0.0"
+    school_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+    period: str | None = Field(default=None, max_length=64)
+    cells: tuple[SkillMatrixCellV1, ...]
+    privacy_min_unit_count: int = Field(default=3, ge=2)
+    generated: bool
+    provenance: Provenance
+    limitations: tuple[str, ...] = Field(min_length=1)
 
 
 class QualityCheckSummaryV1(StrictModel):

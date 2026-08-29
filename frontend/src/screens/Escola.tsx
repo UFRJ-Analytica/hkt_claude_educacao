@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { getSchoolMap } from '../api/client';
 import { AI_ROLE_BY_UI, getSchoolContext, postSchoolActionPlan } from '../api/analytics';
+import { getLessonDelivery } from '../api/turmas';
+import AulaEntregue from '../components/AulaEntregue';
 import type { AISchoolActionPlanResponseV1, IndicatorId, SchoolContext } from '../api/types';
 import { INDICATORS, INDICATOR_ORDER, attentionOf } from '../domain/indicators';
 import { useRole } from '../roles';
@@ -43,6 +45,7 @@ export default function Escola() {
   const { role } = useRole();
   const map = useQuery({ queryKey: ['map'], queryFn: getSchoolMap });
   const context = useQuery({ queryKey: ['context', id], queryFn: () => getSchoolContext(id) });
+  const lessons = useQuery({ queryKey: ['lessons', id], queryFn: () => getLessonDelivery(id) });
 
   const [focus, setFocus] = useState(FOCUS_OPTIONS[0]);
   const [plan, setPlan] = useState<AISchoolActionPlanResponseV1 | null>(null);
@@ -214,6 +217,40 @@ export default function Escola() {
                 </p>
               )}
             </div>
+          )}
+
+          {/* A decomposição deriva da frequência. Se a API declara que esta
+              unidade não tem indicador carregado, ela não pode afirmar que
+              sabe — o bloco vira o mesmo estado de "não carregado". */}
+          {identityOnly ? (
+            <div className="chartblock">
+              <div className="ct">
+                <h5>Aula que chegou ao estudante</h5>
+                <span className="cs">depende da frequência, que não está carregada</span>
+              </div>
+              <span className="hatchbar" style={{ height: 12, borderRadius: 4 }} />
+              <p className="hint">
+                A decomposição entre aula dada, cancelada e sem lançamento vem do campo{' '}
+                <span className="mono">id_situacao</span> da frequência diária. Sem esse dado para a
+                unidade, não há o que decompor — e estimar seria inventar.
+              </p>
+            </div>
+          ) : (
+            lessons.data && (
+            <div className="chartblock">
+              <div className="ct">
+                <h5>Aula que chegou ao estudante</h5>
+                <span className="cs">previstas → canceladas · sem lançamento · dadas → com presença</span>
+              </div>
+              <AulaEntregue d={lessons.data} compact />
+              <p className="hint">
+                {(lessons.data.effective_rate * 100).toFixed(1).replace('.', ',')}% das{' '}
+                {lessons.data.lessons_planned} aulas previstas. Fixture derivada da frequência
+                carregada — o campo <span className="mono">id_situacao</span> resolve isto de forma
+                exata quando o dado do briefing entrar.
+              </p>
+              </div>
+            )
           )}
 
           {ctx && ctx.comparisons.length > 0 && (
