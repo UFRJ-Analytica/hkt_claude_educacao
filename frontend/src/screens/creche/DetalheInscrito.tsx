@@ -19,6 +19,11 @@ import { OpcaoTag, Pilula, PilulaEstado, PilulaEvidencia, rotuloPar } from './co
 
 /* ---------- helpers compartilhados com a lista ---------- */
 
+export function idadeTexto(nascimentoIso: string): string {
+  const m = idadeEmMeses(nascimentoIso);
+  return m === 1 ? '1 mês' : `${m} meses`;
+}
+
 export function idadeEmMeses(nascimentoIso: string): number {
   const base = nascimentoIso.length === 10 ? `${nascimentoIso}T00:00:00` : nascimentoIso;
   const n = new Date(base);
@@ -79,7 +84,7 @@ export function DetalheInscrito({ inscrito, aberto, mobile, unidade, onFechar, o
   const i = inscrito ?? ultimo;
 
   const titulo = i?.crianca.nome ?? 'Inscrito';
-  const sub = i ? `Nascimento ${formatarDataBr(i.crianca.nascimento.slice(0, 10))} · ${idadeEmMeses(i.crianca.nascimento)} meses · ${SEXO_LABEL[i.crianca.sexo]}` : '';
+  const sub = i ? `Nascimento ${formatarDataBr(i.crianca.nascimento.slice(0, 10))} · ${idadeTexto(i.crianca.nascimento)} · ${SEXO_LABEL[i.crianca.sexo]}` : '';
   const pilulas = i ? (
     <div className="flex flex-wrap gap-1.5">
       {i.origem === 'app' ? <Pilula tom="brand">inscrição do app</Pilula> : null}

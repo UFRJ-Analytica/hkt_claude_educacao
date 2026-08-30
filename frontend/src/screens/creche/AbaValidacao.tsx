@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { cn } from '@/lib/utils';
 import { OpcaoTag, Pilula, ProgressoCriterios, rotuloPar } from './comum';
-import { DetalheInscrito, idadeEmMeses, SEXO_LABEL } from './DetalheInscrito';
+import { DetalheInscrito, idadeTexto, SEXO_LABEL } from './DetalheInscrito';
 
 export interface AbaValidacaoProps {
   unidade: Unidade;
@@ -267,7 +267,7 @@ function LinhaInscrito({ i, selecionado, onAbrir }: { i: InscritoUnidade; seleci
             {i.origem === 'app' ? <Pilula tom="brand">inscrição do app</Pilula> : null}
           </div>
           <span className="text-[12px] text-ink-3">
-            {idadeEmMeses(i.crianca.nascimento)} meses · {SEXO_LABEL[i.crianca.sexo]}
+            {idadeTexto(i.crianca.nascimento)} · {SEXO_LABEL[i.crianca.sexo]}
           </span>
         </div>
       </TableCell>
@@ -300,7 +300,7 @@ function CartaoInscrito({ i, selecionado, onAbrir }: { i: InscritoUnidade; selec
             {i.decideVaga ? <Pilula tom="warn">decide vaga</Pilula> : null}
           </div>
           <p className="mt-0.5 text-[12px] text-ink-3">
-            {idadeEmMeses(i.crianca.nascimento)} meses · {SEXO_LABEL[i.crianca.sexo]} · {rotuloPar(i.grupamento, i.horario)}
+            {idadeTexto(i.crianca.nascimento)} · {SEXO_LABEL[i.crianca.sexo]} · {rotuloPar(i.grupamento, i.horario)}
           </p>
         </div>
         <OpcaoTag opcao={i.opcao} aceitaRealocacao={i.aceitaRealocacao} />
