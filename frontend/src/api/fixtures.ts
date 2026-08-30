@@ -12,6 +12,7 @@
  *  - identidade sintética não carrega INEP nem designação SME.
  */
 
+import { takesAdr } from '../domain/units';
 import { RIO_RINGS } from '../domain/rio-geometry';
 import type {
   Capability,
@@ -331,6 +332,7 @@ function hashSeed(value: string): number {
 export function syntheticMetricsFor(
   schoolId: string,
   cre: number,
+  schoolType?: string | null,
 ): { metrics: MetricMap; enrolment: number } {
   const rand = mulberry32(hashSeed(schoolId));
   const k = CRE_KNOBS[cre] ?? CRE_KNOBS[1];
@@ -341,8 +343,15 @@ export function syntheticMetricsFor(
   const capacity = Math.max(0.55, k.capacity + jitter(0.15));
   const assessment = 218 + (attendance - 0.95) * 300 + jitter(18);
 
-  const assessmentBlocked = k.assessCoverage < 0.5;
   const degradedCapacity = k.capCoverage < 0.8;
+
+  // Proficiência vem da ADR, e a ADR é do Fundamental regular. Biblioteca,
+  // creche, EDI, clube escolar e núcleo de arte não fazem a avaliação — o valor
+  // não está faltando, ele NÃO EXISTE. `KNOWN_UNAVAILABLE` marca essa diferença;
+  // `SYNTHETIC_*` com cobertura baixa marca a outra, que é dado que deveria ter
+  // chegado e não chegou. Confundir as duas transforma um fato em pendência.
+  const assessmentApplies = schoolType === undefined ? true : takesAdr(schoolType);
+  const assessmentBlocked = k.assessCoverage < 0.5;
 
   const metrics: MetricMap = {
     attendance_rate: metric(
@@ -350,9 +359,11 @@ export function syntheticMetricsFor(
       'SYNTHETIC_SCHEMA_FAITHFUL', schoolId,
       buildSeries(attendance, k.trend + jitter(0.006), rand), 0.96,
     ),
-    assessment_score: assessmentBlocked
-      ? metric('assessment_score', null, 'BLOCKED', 'mean-score-v1', 'SYNTHETIC_SCHEMA_FAITHFUL', schoolId, null, k.assessCoverage)
-      : metric('assessment_score', Number(assessment.toFixed(1)), 'OK', 'mean-score-v1', 'SYNTHETIC_SCHEMA_FAITHFUL', schoolId, buildSeries(assessment, jitter(6), rand), k.assessCoverage),
+    assessment_score: !assessmentApplies
+      ? metric('assessment_score', null, 'BLOCKED', 'mean-score-v1', 'KNOWN_UNAVAILABLE', schoolId, null, 0)
+      : assessmentBlocked
+        ? metric('assessment_score', null, 'BLOCKED', 'mean-score-v1', 'SYNTHETIC_SCHEMA_FAITHFUL', schoolId, null, k.assessCoverage)
+        : metric('assessment_score', Number(assessment.toFixed(1)), 'OK', 'mean-score-v1', 'SYNTHETIC_SCHEMA_FAITHFUL', schoolId, buildSeries(assessment, jitter(6), rand), k.assessCoverage),
     capacity_utilization: metric(
       'capacity_utilization', Number(capacity.toFixed(4)),
       degradedCapacity ? 'DEGRADED' : 'OK', 'ratio-of-sums-v1', 'SYNTHETIC_INFERRED',

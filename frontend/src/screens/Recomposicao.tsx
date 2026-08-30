@@ -62,7 +62,31 @@ export default function Recomposicao() {
     return m;
   }, [matrix.data]);
 
-  if (!matrix.data) return <Loading label="montando matriz" />;
+  if (matrix.isLoading) return <Loading label="montando matriz" />;
+
+  // Unidade fora da ADR devolve null. Isso não é erro nem ausência de leitura:
+  // é inaplicabilidade, e a tela precisa dizer qual das duas é — senão fica
+  // carregando para sempre, que é o pior dos três estados.
+  if (!matrix.data) {
+    return (
+      <div className="statepage">
+        <div className="k">recomposição</div>
+        <h2>Esta unidade não participa da avaliação diagnóstica.</h2>
+        <p>
+          A Atividade Diagnóstica em Rede cobre do 1º ao 9º ano do Ensino Fundamental. Creche, EDI,
+          Clube Escolar, Núcleo de Arte e Biblioteca Escolar não fazem a avaliação — não existe matriz
+          de descritores para elas, e exibir uma vazia sugeriria que o dado deveria estar lá.
+        </p>
+        <p>
+          Para educação infantil, o que se acompanha é acesso, demanda, frequência, infraestrutura e
+          território — não acerto por habilidade.
+        </p>
+        <button type="button" className="btn" style={{ maxWidth: 260 }} onClick={() => setParams({})}>
+          Voltar para a rede
+        </button>
+      </div>
+    );
+  }
   const data = matrix.data;
 
   /** Média por descritor no recorte — mostra qual habilidade é a mais frágil. */

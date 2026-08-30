@@ -646,3 +646,59 @@ tr.meanrow td:first-child { background: var(--surface-2); }
 .gradecol .gs { font-size: 10px; color: var(--ink-3); margin-top: 2px; }
 .gradekey { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 14px; font-family: var(--mono); font-size: 10px; color: var(--ink-3); }
 .gradekey .tr { color: var(--a2); }
+
+/* decomposição visível dos componentes do sinal */
+.decomp { display: flex; gap: 7px; }
+.decomp .dm { flex: 1; min-width: 0; }
+.decomp .lab { font-family: var(--mono); font-size: 8px; letter-spacing: 0.04em; color: var(--ink-3); text-transform: uppercase; margin-bottom: 4px; white-space: nowrap; }
+.decomp .track { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.decomp .fill { display: block; height: 100%; background: var(--ink-3); border-radius: 2px; }
+.decomp .dm.conf .fill { background: var(--accent); }
+.derivedinline { margin-top: clamp(22px, 3vw, 32px); padding: 10px 13px; background: #fbf6f2; border: 1px solid #e6d8cd; border-radius: var(--r-sm); font-family: var(--mono); font-size: 10.5px; line-height: 1.65; color: var(--ink-2); }
+.derivedinline b { color: var(--a3); font-weight: 500; }
+
+/* decomposição visível dos componentes do sinal */
+.decomp { display: flex; gap: 7px; }
+.decomp .dm { flex: 1; min-width: 0; }
+.decomp .lab { font-family: var(--mono); font-size: 8px; letter-spacing: 0.04em; color: var(--ink-3); text-transform: uppercase; margin-bottom: 4px; white-space: nowrap; }
+.decomp .track { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.decomp .fill { display: block; height: 100%; background: var(--ink-3); border-radius: 2px; }
+.decomp .dm.conf .fill { background: var(--accent); }
+.derivedinline { margin-top: clamp(22px, 3vw, 32px); padding: 10px 13px; background: #fbf6f2; border: 1px solid #e6d8cd; border-radius: var(--r-sm); font-family: var(--mono); font-size: 10.5px; line-height: 1.65; color: var(--ink-2); }
+.derivedinline b { color: var(--a3); font-weight: 500; }
+
+/* ---------- Escola 360: turmas, fluxo e carência da unidade ---------- */
+
+/* O grão de turma é onde a decisão vira ação. Grade densa, sem cartão: a
+   supressão precisa ser visível ao lado das turmas que têm leitura, não
+   escondida numa nota de rodapé. */
+.turmagrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); gap: 2px 20px; margin-top: 16px; }
+.turmacell { display: grid; grid-template-columns: 74px 1fr; gap: 8px 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.turmacell .tl { font-size: 12px; color: var(--ink); font-weight: 500; }
+.turmacell .bar { width: 100%; }
+.turmacell .hatchbar { width: 100%; height: 4px; }
+.turmacell .tv { grid-column: 2; font-size: 10.5px; color: var(--ink-3); }
+.turmacell.sup .tl { color: var(--ink-3); }
+.turmacell.sup .tv { color: var(--void); }
+
+.statline.tight { margin-top: 16px; }
+.statline.tight .st { padding-right: clamp(14px, 2vw, 26px); margin-right: clamp(14px, 2vw, 26px); }
+.statline .v.worse { color: var(--a3); }
+
+.gaptable.compact { margin-top: 16px; }
+.gaptable.compact .gaprow { grid-template-columns: 120px 74px 1fr 54px 54px; gap: 10px; font-size: 12px; padding: 7px 0; }
+
+/* ---------- Mapa: leitura da unidade selecionada ---------- */
+
+/* A cor do ponto vem destes números. Mostrá-los aqui é o que impede o card de
+   contradizer o mapa. */
+.selmetrics { margin: 12px 0 4px; }
+.selrow { display: grid; grid-template-columns: 1fr 46px 62px; gap: 9px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); font-size: 11.5px; }
+.selrow .nm { color: var(--ink-2); }
+.selrow .sv { font-size: 10.5px; text-align: right; color: var(--ink); }
+.selrow .sv.off { color: var(--void); }
+.bar.mini { width: 46px; height: 3px; }
+.hatchbar.mini { height: 3px; }
+
+.cardnote { font-size: 11px; color: var(--ink-3); line-height: 1.5; margin-top: 10px; }
+.hint.standalone { margin: 0 0 18px; padding: 12px 16px; border-left: 2px solid var(--line-2); background: var(--surface-2); }

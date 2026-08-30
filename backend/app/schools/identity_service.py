@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from app.contracts.provenance import Provenance, SourceKind
+from app.data_access.inep_census_adapter import FLAG_FIELDS, InepCensusAdapter
 from app.data_access.ports import SchoolIdentityPort
 from app.schools.contracts import (
     IndicatorId,
@@ -14,12 +15,14 @@ from app.schools.contracts import (
 )
 from app.schools.identity_contracts import (
     CanonicalSchoolRecord,
+    CensusRelease,
     IdentityLookup,
     IdentityMatchField,
     IdentityResolutionStatus,
     OfficialSchoolList,
     OfficialSchoolListCoverage,
     OfficialSchoolListQuery,
+    SchoolCensus,
     SchoolContext,
     SchoolContextMapLinks,
     SchoolIdentityResolution,
@@ -47,8 +50,64 @@ _MATCHED_LIMITATION = (
 )
 
 
+def _census_block(record: dict[str, object], year: int) -> "SchoolCensus | None":
+    """Traduz a linha crua do Censo para o contrato do produto.
+
+    Os nomes do INEP (`QT_MAT_FUND_AF_6`) não sobem para a interface: eles
+    descrevem o arquivo, não a decisão. O contrato usa nomes do domínio e
+    carrega o ano de referência para que nenhum número real apareça sem régua.
+    """
+    inep_id = record.get("inep_id")
+    if not isinstance(inep_id, str) or len(inep_id) != 8:
+        return None
+
+    def count(field: str) -> int | None:
+        value = record.get(field)
+        return int(value) if isinstance(value, int | float) else None
+
+    grades = tuple(
+        count(field)
+        for field in (
+            "QT_MAT_FUND_AI_1", "QT_MAT_FUND_AI_2", "QT_MAT_FUND_AI_3",
+            "QT_MAT_FUND_AI_4", "QT_MAT_FUND_AI_5",
+            "QT_MAT_FUND_AF_6", "QT_MAT_FUND_AF_7", "QT_MAT_FUND_AF_8", "QT_MAT_FUND_AF_9",
+        )
+    )
+    devices = sum(
+        count(field) or 0
+        for field in ("QT_DESKTOP_ALUNO", "QT_COMP_PORTATIL_ALUNO", "QT_TABLET_ALUNO")
+    )
+    infrastructure = {
+        field: (bool(value) if isinstance(value := record.get(field), bool | int) else None)
+        for field in FLAG_FIELDS
+    }
+    return SchoolCensus(
+        inep_id=inep_id,
+        inep_name=str(record.get("inep_name") or inep_id),
+        reference_year=year,
+        enrolment_total=count("QT_MAT_BAS"),
+        enrolment_infant=count("QT_MAT_INF"),
+        enrolment_fundamental=count("QT_MAT_FUND"),
+        enrolment_fundamental_early=count("QT_MAT_FUND_AI"),
+        enrolment_fundamental_late=count("QT_MAT_FUND_AF"),
+        enrolment_special=count("QT_MAT_ESP"),
+        enrolment_by_grade=grades,
+        classes_total=count("QT_TUR_BAS"),
+        classes_fundamental=count("QT_TUR_FUND"),
+        teachers_total=count("QT_DOC_BAS"),
+        teachers_fundamental=count("QT_DOC_FUND"),
+        rooms_used=count("QT_SALAS_UTILIZADAS"),
+        rooms_climatised=count("QT_SALAS_UTILIZA_CLIMATIZADAS"),
+        rooms_accessible=count("QT_SALAS_UTILIZADAS_ACESSIVEIS"),
+        student_devices=devices,
+        infrastructure=infrastructure,
+    )
+
+
 class SchoolIdentityResolver:
-    def __init__(self, repository: SchoolIdentityPort) -> None:
+    def __init__(
+        self, repository: SchoolIdentityPort, census: InepCensusAdapter | None = None
+    ) -> None:
         if not repository.validate():
             raise IdentityDatasetUnavailableError("official identity registry is unavailable")
         provenance = repository.provenance()
@@ -61,6 +120,9 @@ class SchoolIdentityResolver:
             raise IdentityDatasetUnavailableError("official identity provenance is invalid")
         self._repository = repository
         self._provenance = provenance
+        # O Censo é opcional: sem release publicada o produto continua de pé,
+        # só que sem os campos reais. Falta de dado real nunca derruba a tela.
+        self._census = census if census is not None and census.available() else None
 
     def provenance(self) -> Provenance:
         return self._provenance
@@ -82,8 +144,10 @@ class SchoolIdentityResolver:
             raise IdentityDatasetUnavailableError(
                 "official identity registry failed during list query"
             ) from error
+        enriched, matched = self._with_census(records)
         return OfficialSchoolList(
-            records=records,
+            records=enriched,
+            census_release=self._census_release(matched),
             coverage=OfficialSchoolListCoverage(
                 total=total,
                 with_coordinates=with_coordinates,
@@ -96,6 +160,36 @@ class SchoolIdentityResolver:
             limitations=self._provenance.limitations,
         )
 
+    def _with_census(
+        self, records: tuple[CanonicalSchoolRecord, ...]
+    ) -> tuple[tuple[CanonicalSchoolRecord, ...], int]:
+        """Junta o Censo pela designação SME. Chave exata, nunca por nome."""
+        if self._census is None:
+            return records, 0
+        year = self._census.reference_year
+        out: list[CanonicalSchoolRecord] = []
+        matched = 0
+        for record in records:
+            raw = self._census.get(record.identity.sme_designation)
+            block = _census_block(raw, year) if raw is not None else None
+            if block is not None:
+                matched += 1
+                out.append(record.model_copy(update={"census": block}))
+            else:
+                out.append(record)
+        return tuple(out), matched
+
+    def _census_release(self, matched: int) -> "CensusRelease | None":
+        if self._census is None:
+            return None
+        return CensusRelease(
+            snapshot_id=self._census.snapshot_id,
+            reference_year=self._census.reference_year,
+            matched=matched,
+            source_urls=self._census.source_urls,
+            limitations=self._census.limitations,
+        )
+
     def get_context(
         self, school_id: str, school_map_service: Any | None = None
     ) -> SchoolContext:
@@ -103,6 +197,7 @@ class SchoolIdentityResolver:
             record = self._repository.lookup(IdentityMatchField.SCHOOL_ID, school_id)
             if record is None:
                 return self._not_found_context(school_id)
+            record = self._with_census((record,))[0][0]
             profile = self._optional_profile(school_map_service, school_id)
             comparisons = self._comparisons(school_map_service, profile, record)
         except (ValueError, OSError, RuntimeError, KeyError) as error:

@@ -11,6 +11,7 @@
  */
 
 import { apiSource, getSchoolMap } from './client';
+import { takesAdr } from '../domain/units';
 import type {
   LessonDelivery,
   QualityStatus,
@@ -23,6 +24,8 @@ import type {
 } from './types';
 
 /** Limiar de supressão. Espelha `privacy_min_unit_count` da spec. */
+export { takesAdr } from '../domain/units';
+
 export const PRIVACY_MIN_UNIT_COUNT = 10;
 
 const FIXTURE_NOTE =
@@ -51,23 +54,6 @@ const SKILL_DIFFICULTY: Record<string, number> = {
 
 export const PERIOD_LABEL = '3º bimestre de 2026';
 
-/**
- * Tipos de equipamento que participam da Atividade Diagnóstica em Rede.
- *
- * A ADR cobre do 1º ao 9º ano do Ensino Fundamental. Creche, EDI, Clube
- * Escolar, Núcleo de Arte e Biblioteca Escolar NÃO participam — atribuir acerto
- * em Língua Portuguesa e Matemática a uma creche seria inventar avaliação que
- * não existe, e é o erro que um avaliador da SME identifica na hora.
- */
-const ADR_TYPES = ['escola municipal', 'ciep', 'escola cívico militar', 'escola civico militar'];
-
-export function takesAdr(schoolType: string | null | undefined): boolean {
-  if (!schoolType) return false;
-  const t = schoolType.toLowerCase();
-  if (t.includes('especial')) return false; // avaliação adaptada, fora do recorte
-  return ADR_TYPES.some((allowed) => t.includes(allowed));
-}
-
 function hashSeed(value: string): number {
   let h = 2166136261;
   for (let i = 0; i < value.length; i += 1) {
@@ -89,32 +75,61 @@ function mulberry32(a: number) {
 
 const GRADES = ['1º', '2º', '3º', '4º', '5º', '6º', '7º', '8º', '9º'];
 
-/** Turmas de uma escola. Determinístico pelo school_id. */
+/**
+ * Turmas de uma escola. Determinístico pelo school_id.
+ *
+ * A contagem DERIVA da matrícula da unidade. Gerar um número solto de turmas
+ * produzia "334 matriculados em 4 turmas" — a primeira coisa que alguém da SME
+ * confere, e a que derruba a credibilidade do resto da tela. Turma é o grão da
+ * decisão; se ele não fecha com a matrícula, nada acima dele fecha.
+ */
 export function turmasOf(school: SchoolMapFeature): TurmaSummary[] {
   const id = school.properties.identity.school_id;
   const rand = mulberry32(hashSeed(`turmas:${id}`));
-  const count = 4 + Math.floor(rand() * 9);
-  const out: TurmaSummary[] = [];
+  const enrolment = school.properties.enrolment ?? 400;
 
-  for (let i = 0; i < count; i += 1) {
-    const grade = GRADES[Math.floor(rand() * GRADES.length)];
-    const letter = String.fromCharCode(65 + (i % 4));
-    // uma minoria de turmas pequenas, para a supressao aparecer de verdade
-    const students = rand() < 0.14 ? 4 + Math.floor(rand() * 6) : 18 + Math.floor(rand() * 17);
-    const suppressed = students < PRIVACY_MIN_UNIT_COUNT;
-    out.push({
-      turma_id: `${id}.${grade.replace('º', '')}${letter}`,
-      turma_label: `${grade} ano ${letter}`,
-      grade,
-      school_id: id,
-      student_count: suppressed ? null : students,
-      suppressed,
-      suppression_reason: suppressed ? 'SMALL_GROUP' : null,
-      coverage: suppressed ? 0 : 0.82 + rand() * 0.17,
-      quality: suppressed ? 'BLOCKED' : rand() < 0.12 ? 'DEGRADED' : 'OK',
-    });
+  // ~27 estudantes por turma, que é a ordem de grandeza da rede municipal
+  const count = Math.max(2, Math.min(36, Math.round(enrolment / 27)));
+
+  // distribui as turmas pelos anos, em blocos contíguos: uma escola tem 3º A,
+  // 3º B, 3º C — não uma turma solta de cada ano
+  const gradesUsed = Math.max(1, Math.min(GRADES.length, Math.ceil(count / 2)));
+  const startGrade = Math.floor(rand() * (GRADES.length - gradesUsed + 1));
+
+  const out: TurmaSummary[] = [];
+  const perGrade = Math.floor(count / gradesUsed);
+  const extra = count - perGrade * gradesUsed;
+  let remaining = enrolment;
+  let left = count;
+
+  for (let gi = 0; gi < gradesUsed; gi += 1) {
+    const grade = GRADES[startGrade + gi];
+    const turmasNesteAno = perGrade + (gi < extra ? 1 : 0);
+
+    for (let li = 0; li < turmasNesteAno; li += 1) {
+      const letter = String.fromCharCode(65 + li);
+      // reparte a matrícula restante para que a soma feche com a da unidade
+      const avg = remaining / Math.max(1, left);
+      const students =
+        left === 1 ? Math.max(1, remaining) : Math.max(4, Math.round(avg * (0.82 + rand() * 0.36)));
+      remaining -= students;
+      left -= 1;
+
+      const suppressed = students < PRIVACY_MIN_UNIT_COUNT;
+      out.push({
+        turma_id: `${id}.${grade.replace('º', '')}${letter}`,
+        turma_label: `${grade} ano ${letter}`,
+        grade,
+        school_id: id,
+        student_count: suppressed ? null : students,
+        suppressed,
+        suppression_reason: suppressed ? 'SMALL_GROUP' : null,
+        coverage: suppressed ? 0 : 0.82 + rand() * 0.17,
+        quality: suppressed ? 'BLOCKED' : rand() < 0.12 ? 'DEGRADED' : 'OK',
+      });
+    }
   }
-  return out.sort((a, b) => a.turma_label.localeCompare(b.turma_label, 'pt-BR'));
+  return out;
 }
 
 export async function getTurmas(schoolId: string): Promise<TurmaList | null> {

@@ -65,7 +65,9 @@ export const INDICATORS: Record<IndicatorId, IndicatorSpec> = {
     worse: 'low',
     thresholds: [214, 205, 196],
     scale: [180, 250],
-    format: (v) => v.toFixed(1).replace('.', ','),
+    // Escala de proficiência, não percentual. Sem a unidade, "219,2" ao lado de
+    // "95,0%" não diz em que régua está — e a régua é o que dá sentido ao número.
+    format: (v) => `${v.toFixed(1).replace('.', ',')} pts`,
   },
 };
 
@@ -122,6 +124,14 @@ export const INDICATOR_ORDER: IndicatorId[] = [
   'capacity_utilization',
   'assessment_score',
 ];
+
+/**
+ * Vazio porque não se aplica — distinto de vazio porque não chegou.
+ * A tela precisa dizer qual dos dois, senão vira pendência o que é fato.
+ */
+export function isNotApplicable(metric: SchoolMetric | undefined): boolean {
+  return metric?.source_kind === 'KNOWN_UNAVAILABLE';
+}
 
 export function attentionOf(metric: SchoolMetric | undefined): Attention {
   if (!metric) return 'unreadable';

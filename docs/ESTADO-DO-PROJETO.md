@@ -86,7 +86,64 @@ CIEP 101 · Biblioteca Escolar 13 · Escola Especial 10 · Núcleo de Arte 9 ·
 Clube Escolar 6 · CEJA 2 · CDEI 1 · Escola Cívico-Militar 1.
 
 Campo `neighborhood` vem **nulo** em todos os 1.588. Não rotule CRE por bairro:
-a fonte não sustenta.
+a fonte não sustenta. `inep_id` também vem nulo nos 1.588 — mas isso deixou de
+ser um beco sem saída (ver 3.1b).
+
+### 3.1b A ponte INEP — resolvida, por chave exata
+
+**O Censo Escolar do INEP está carregado, com dado real por escola.**
+
+A ponte parecia impossível porque o Data.Rio não publica `CO_ENTIDADE` e o
+projeto proíbe match por nome. Mas o INEP grava o nome da escola municipal do
+Rio como `<designação de 7 dígitos> <nome>`:
+
+```
+0102002 EM TIRADENTES
+0101501 CIEP HENFIL
+0101803 EDI ANTONIO RAPOSO TAVARES
+```
+
+A designação é exatamente a chave que o Data.Rio publica em `sme_designation`.
+**Isso é junção por chave, não similaridade textual** — a distinção que separa
+esta ponte da que o projeto proíbe. A chave casa ou não casa, e a cobertura é
+medida.
+
+Publicado por `backend/scripts/import_inep_census.py` em
+`data/official/inep_census/`, mesmo padrão content-addressed do cadastro.
+Censo 2024, 1.556 escolas, release `baf77242…`.
+
+**Cobertura: 1.546 de 1.588 (97,4%).**
+
+| tipo | unidades | com INEP | matrícula real | turmas reais |
+|---|---:|---:|---:|---:|
+| Escola Municipal | 911 | 902 | 435.227 | 14.585 |
+| EDI | 286 | 284 | 67.688 | 3.028 |
+| Creche Municipal | 247 | 246 | 33.364 | 1.527 |
+| CIEP | 101 | 101 | 60.769 | 2.280 |
+| Escola Especial | 10 | 10 | 994 | 113 |
+| CEJA | 2 | 2 | 614 | 59 |
+| Cívico-Militar | 1 | 1 | 554 | 16 |
+| Biblioteca, Núcleo de Arte, Clube, CDEI, Polo | 30 | 0 | — | — |
+| **total** | **1.588** | **1.546** | **599.210** | **21.608** |
+
+Os 30 com zero não são lacuna: **não são escolas no Censo**. É o mesmo
+`NÃO SE APLICA` da seção 6 — o dado não deveria existir para eles.
+
+**O que passa a ser real por escola:** matrícula total, por etapa e **por ano de
+escolaridade** (1º ao 9º, separadamente); turmas por etapa; docentes por etapa;
+salas utilizadas, climatizadas e acessíveis; computadores, portáteis e tablets
+para aluno; e 19 indicadores de infraestrutura — internet, internet para aluno,
+biblioteca, sala de leitura, quadra, laboratórios, refeitório, alimentação,
+banheiro PNE, rampas, elevador, água potável, esgoto e energia de rede.
+
+**Isto derruba parte do sintético, e derrubou errado antes.** A Escola Municipal
+Tiradentes tinha 334 matrículas e 12 turmas do 1º ao 6º ano no sintético. O real
+é 195 matrículas, 8 turmas, 12 docentes e **zero no 6º ano** — é uma escola só
+de anos iniciais. O sintético inventava um segmento que a escola não tem.
+
+**O que continua sem fonte real:** frequência, desempenho por descritor, carência
+docente, movimentação de matrícula e aula entregue. Nenhum deles está no Censo —
+são do pipeline da SME (3.2) ou do briefing (3.3).
 
 ### 3.2 O pipeline da SME — verificado, sem acesso ao dado
 
@@ -275,6 +332,14 @@ determinístico por padrão; `anthropic` opt-in e fail-closed. Resposta traz
 
 ### 5.2 Frontend — telas
 
+Todas as telas de recorte aceitam escopo de **escola**, não só de rede e CRE.
+Clicar numa unidade no mapa e não conseguir ver nada dela era o buraco mais
+visível do produto: o ponto estava pintado por um indicador que o painel se
+recusava a mostrar. `IDENTITY_ONLY` do backend significa que **o snapshot do
+backend** não tem métrica para aquele identificador — não que nada possa ser
+exibido. A camada de demonstração local tem os números, são os mesmos que
+pintam o ponto, e a Escola 360 os mostra dizendo de onde vieram.
+
 `frontend/src/screens/`
 
 | tela | rota | o que faz |
@@ -355,6 +420,27 @@ recomposição cobre apenas Escola Municipal, CIEP e Cívico-Militar — as dema
 ficam fora **por inaplicabilidade, não por ausência de dado**, e a tela diz isso.
 Atribuir acerto em Português a uma creche é o erro que um avaliador da SME
 identifica em dois segundos.
+
+A regra vive em **`frontend/src/domain/units.ts`** — um lugar só. `takesAdr`,
+`isFundamental` e `isEarlyChildhood` são consumidos pelo gerador de sintéticos,
+pelo mapa, pela Escola 360, pela Recomposição e pelo Fluxo. Duplicá-la foi
+exatamente como a proficiência voltou a aparecer em biblioteca.
+
+**`NÃO SE APLICA` e `SEM LEITURA` são estados diferentes e a tela nunca os
+soma.** Os dois aparecem vazios; significam o oposto. "Não se aplica" é fato
+consumado: o dado não deveria existir. "Sem leitura" é lacuna: deveria ter
+chegado e não chegou — e só essa é cobrável de alguém.
+
+O contrato marca a diferença por proveniência: `source_kind =
+KNOWN_UNAVAILABLE` para inaplicável, `SYNTHETIC_*` com cobertura baixa para
+lacuna. `isNotApplicable()` em `domain/indicators.ts` é a única leitura desse
+estado, e a agregação de rede tira as inaplicáveis do denominador.
+
+No mapa, com Desempenho ativo: **598 sem sinal · 247 baixa · 64 atenção · 6
+crítico · 98 sem leitura · 575 não se aplica**, somando as 1.588. As 575 são
+EDIs, creches, bibliotecas, núcleos de arte, clubes escolares, CEJAs e a escola
+especial. Antes desta correção elas recebiam proficiência sintética como
+qualquer escola — o mapa inteiro dizia que biblioteca tem nota de ADR.
 
 ---
 

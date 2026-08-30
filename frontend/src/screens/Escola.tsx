@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { getSchoolMap } from '../api/client';
 import { AI_ROLE_BY_UI, getSchoolContext, postSchoolActionPlan } from '../api/analytics';
-import { getLessonDelivery } from '../api/turmas';
+import { getLessonDelivery, getTurmas, takesAdr, PRIVACY_MIN_UNIT_COUNT } from '../api/turmas';
+import { getFlow, getStaffingGap, isFundamental } from '../api/pipeline';
 import AulaEntregue from '../components/AulaEntregue';
 import type { AISchoolActionPlanResponseV1, IndicatorId, SchoolContext } from '../api/types';
 import { INDICATORS, INDICATOR_ORDER, attentionOf } from '../domain/indicators';
@@ -13,11 +14,19 @@ import { Loading } from '../components';
 /**
  * Painel de contexto da escola.
  *
- * Regra central: uma unidade REAL sempre abre. Quando não há métrica carregada
- * para o identificador, o backend devolve `IDENTITY_ONLY` — identidade, CRE,
- * tipo e coordenada reais, sem indicador — e a tela mostra exatamente isso.
- * Nunca "escola não encontrada": a escola existe; o que falta é cobertura.
+ * Regra central: uma unidade REAL sempre abre. Nunca "escola não encontrada":
+ * a escola existe; o que falta é cobertura.
+ *
+ * `IDENTITY_ONLY` do backend significa que o SNAPSHOT DO BACKEND não tem métrica
+ * para aquele identificador. Não significa que nada possa ser exibido: a camada
+ * de demonstração local tem números para a unidade, e são exatamente os mesmos
+ * que pintam o ponto dela no mapa. Esconder aqui o que o mapa mostra ali seria
+ * incoerente nas duas pontas. O que a tela deve fazer é dizer de onde veio cada
+ * número — e é o que ela faz.
  */
+
+const int = (v: number) => v.toLocaleString('pt-BR');
+const pct = (v: number) => `${(v * 100).toFixed(1).replace('.', ',')}%`;
 
 const FOCUS_OPTIONS = [
   'frequência e aprendizagem',
@@ -34,10 +43,24 @@ function isEarlyChildhood(schoolType: string | null): boolean {
   return t.includes('creche') || t.includes('edi') || t.includes('cdei');
 }
 
+/**
+ * Desempenho vem da ADR, e a ADR só existe no Fundamental regular. Creche, EDI,
+ * biblioteca, núcleo de arte, clube escolar e polo não fazem a avaliação —
+ * atribuir proficiência a uma biblioteca é o mesmo erro que atribuir nota de
+ * Português a uma creche, e é o que um avaliador da SME identifica na hora.
+ */
 function applicableIndicators(schoolType: string | null): IndicatorId[] {
-  return isEarlyChildhood(schoolType)
-    ? INDICATOR_ORDER.filter((id) => id !== 'assessment_score')
-    : INDICATOR_ORDER;
+  return takesAdr(schoolType)
+    ? INDICATOR_ORDER
+    : INDICATOR_ORDER.filter((id) => id !== 'assessment_score');
+}
+
+/** Nome da classe de equipamento, para explicar a omissão em vez de só omitir. */
+function unitClassNote(schoolType: string | null): string | null {
+  if (takesAdr(schoolType)) return null;
+  if (isEarlyChildhood(schoolType))
+    return 'Educação infantil não faz a Atividade Diagnóstica em Rede e não tem IDEB. Desempenho por descritor e decomposição de aula não se aplicam — foram omitidos em vez de exibidos vazios.';
+  return 'Este equipamento não oferece turma regular do Ensino Fundamental. Desempenho por descritor e decomposição de aula pertencem à escola de origem do estudante, não a ele.';
 }
 
 export default function Escola() {
@@ -46,6 +69,9 @@ export default function Escola() {
   const map = useQuery({ queryKey: ['map'], queryFn: getSchoolMap });
   const context = useQuery({ queryKey: ['context', id], queryFn: () => getSchoolContext(id) });
   const lessons = useQuery({ queryKey: ['lessons', id], queryFn: () => getLessonDelivery(id) });
+  const turmas = useQuery({ queryKey: ['turmas', id], queryFn: () => getTurmas(id) });
+  const flow = useQuery({ queryKey: ['flow-school', id], queryFn: () => getFlow(null, id) });
+  const gap = useQuery({ queryKey: ['gap-school', id], queryFn: () => getStaffingGap(null, id) });
 
   const [focus, setFocus] = useState(FOCUS_OPTIONS[0]);
   const [plan, setPlan] = useState<AISchoolActionPlanResponseV1 | null>(null);
@@ -82,8 +108,14 @@ export default function Escola() {
     );
   }
 
-  const identityOnly = ctx ? ctx.metric_coverage.status === 'IDENTITY_ONLY' : false;
+  const backendHasNoMetric = ctx ? ctx.metric_coverage.status === 'IDENTITY_ONLY' : false;
   const metrics = ctx?.synthetic_profile?.metrics ?? feature?.properties.metrics ?? {};
+  const hasLocalMetrics = Object.values(metrics).some((m) => m && m.value !== null);
+
+  // Só bloqueia quando não há NADA — nem no backend, nem na camada local.
+  const identityOnly = backendHasNoMetric && !hasLocalMetrics;
+  // Backend sem métrica, mas o mapa tem: exibe e diz de onde veio.
+  const localFallback = backendHasNoMetric && hasLocalMetrics;
   const indicators = applicableIndicators(identity.school_type);
   const mapsUrl =
     ctx?.map_links.google_maps_url ??
@@ -95,6 +127,10 @@ export default function Escola() {
     (coords
       ? `https://www.google.com/maps/dir/?api=1&destination=${coords.latitude},${coords.longitude}`
       : null);
+
+  const fundamental = isFundamental(identity.school_type);
+  const classNote = unitClassNote(identity.school_type);
+  const suppressedCount = (turmas.data?.turmas ?? []).filter((t) => t.suppressed).length;
 
   const runPlan = async () => {
     setPlanning(true);
@@ -140,8 +176,10 @@ export default function Escola() {
           <div className={`coverkard${identityOnly ? ' identityonly' : ''}`}>
             <div className="k">Cobertura de indicadores</div>
             <p>
-              {ctx?.metric_coverage.message ??
-                'Origem local: a API não respondeu, e os indicadores desta tela vêm do recorte sintético carregado.'}
+              {localFallback
+                ? `O snapshot do backend não tem métrica para este identificador. Os números abaixo vêm da camada de demonstração local — são os mesmos que pintam esta unidade no mapa, e não são desempenho real.`
+                : (ctx?.metric_coverage.message ??
+                  'Origem local: a API não respondeu, e os indicadores desta tela vêm do recorte sintético carregado.')}
             </p>
             {ctx?.metric_coverage.snapshot_id && (
               <span className="mono snap">
@@ -176,9 +214,11 @@ export default function Escola() {
               <div className="ct">
                 <h5>Indicadores</h5>
                 <span className="cs">
-                  {ctx
-                    ? 'métricas de demonstração — não são desempenho real'
-                    : 'recorte sintético local'}
+                  {localFallback
+                    ? 'camada de demonstração local — mesma origem do mapa'
+                    : ctx
+                      ? 'métricas de demonstração — não são desempenho real'
+                      : 'recorte sintético local'}
                 </span>
               </div>
               <div className="emptymetrics">
@@ -210,19 +250,14 @@ export default function Escola() {
                   );
                 })}
               </div>
-              {isEarlyChildhood(identity.school_type) && (
-                <p className="hint">
-                  Educação infantil não tem IDEB — desempenho não é indicador aplicável a esta unidade
-                  e foi omitido em vez de exibido como vazio.
-                </p>
-              )}
             </div>
           )}
 
-          {/* A decomposição deriva da frequência. Se a API declara que esta
-              unidade não tem indicador carregado, ela não pode afirmar que
-              sabe — o bloco vira o mesmo estado de "não carregado". */}
-          {identityOnly ? (
+          {classNote && <p className="hint standalone">{classNote}</p>}
+
+          {/* A decomposição deriva da frequência de turma regular. Onde não há
+              turma regular, não há o que decompor — e o bloco não aparece. */}
+          {!takesAdr(identity.school_type) ? null : identityOnly ? (
             <div className="chartblock">
               <div className="ct">
                 <h5>Aula que chegou ao estudante</h5>
@@ -251,6 +286,137 @@ export default function Escola() {
               </p>
               </div>
             )
+          )}
+
+          {/* ---------- turmas: o grão onde a decisão acontece ---------- */}
+          {fundamental && turmas.data && turmas.data.turmas.length > 0 && (
+            <div className="chartblock">
+              <div className="ct">
+                <h5>Turmas</h5>
+                <span className="cs">
+                  {turmas.data.turmas.length} turmas · {suppressedCount} suprimida
+                  {suppressedCount === 1 ? '' : 's'} por grupo pequeno
+                </span>
+              </div>
+              <div className="turmagrid">
+                {turmas.data.turmas.map((t) => (
+                  <div className={`turmacell${t.suppressed ? ' sup' : ''}`} key={t.turma_id}>
+                    <span className="tl">{t.turma_label}</span>
+                    {t.suppressed ? (
+                      <>
+                        <span className="hatchbar" />
+                        <span className="mono tv">suprimida</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="bar">
+                          <i className="ok" style={{ width: `${t.coverage * 100}%` }} />
+                        </span>
+                        <span className="mono tv">
+                          {t.student_count} est. · {(t.coverage * 100).toFixed(0)}%
+                        </span>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <p className="hint">
+                Turma com menos de {PRIVACY_MIN_UNIT_COUNT} estudantes avaliados não tem valor
+                exibido. Em turma pequena, o resultado agregado identifica o estudante — a supressão
+                é da arquitetura, não uma configuração de tela.
+              </p>
+            </div>
+          )}
+
+          {/* ---------- fluxo: para onde o aluno desta escola foi ---------- */}
+          {fundamental && flow.data && flow.data.rows.length > 0 && (
+            <div className="chartblock">
+              <div className="ct">
+                <h5>Movimentação de matrícula</h5>
+                <span className="cs">entrada e saída no ano · schema <span className="mono">movimentacao</span></span>
+              </div>
+              {(() => {
+                const r = flow.data.rows[0];
+                return (
+                  <>
+                    <div className="statline tight">
+                      <div className="st">
+                        <div className="k">Matrícula</div>
+                        <div className="v">{int(r.matricula_base)}</div>
+                      </div>
+                      <div className="st">
+                        <div className="k">Entradas</div>
+                        <div className="v">+{int(r.entradas)}</div>
+                      </div>
+                      <div className="st">
+                        <div className="k">Saída interna</div>
+                        <div className="v">
+                          −{int(r.saidas_internas)} <em>outra unidade da rede</em>
+                        </div>
+                      </div>
+                      <div className="st">
+                        <div className="k">Saída externa</div>
+                        <div className="v">
+                          −{int(r.saidas_externas)} <em className="bad">fora da rede</em>
+                        </div>
+                      </div>
+                      <div className="st">
+                        <div className="k">Saldo</div>
+                        <div className={`v ${r.saldo < 0 ? 'worse' : ''}`}>{r.saldo}</div>
+                      </div>
+                    </div>
+                    <p className="hint">
+                      {int(r.trajetorias_interrompidas)} estudantes com três ou mais movimentações no
+                      ano — contagem, nunca lista nominal. Saída interna e externa não se somam:
+                      transferir dentro da rede e sair da rede pedem respostas diferentes.
+                    </p>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* ---------- carência por disciplina nesta unidade ---------- */}
+          {fundamental && gap.data && (
+            <div className="chartblock">
+              <div className="ct">
+                <h5>Carência docente por disciplina</h5>
+                <span className="cs">horas sem professor · aulas canceladas</span>
+              </div>
+              <div className="gaptable compact">
+                {gap.data.rows.slice(0, 5).map((r) => (
+                  <div className="gaprow" key={r.disciplina}>
+                    <span className="gd">{r.disciplina}</span>
+                    <span className="gt">{int(r.horas_sem_professor)} h</span>
+                    <span className="gbars">
+                      <span className="gbar">
+                        <i className="car" style={{ width: `${Math.min(100, r.taxa_carencia * 260)}%` }} />
+                      </span>
+                      <span className="gbar">
+                        <i className="can" style={{ width: `${Math.min(100, r.taxa_cancelamento * 260)}%` }} />
+                      </span>
+                    </span>
+                    <span className="gv mono">{pct(r.taxa_carencia)}</span>
+                    <span className="gv mono bad">{pct(r.taxa_cancelamento)}</span>
+                  </div>
+                ))}
+                <div className="gaplegend">
+                  <span>
+                    <i className="car" />
+                    horas sem professor
+                  </span>
+                  <span>
+                    <i className="can" />
+                    aulas canceladas
+                  </span>
+                </div>
+              </div>
+              <p className="hint">
+                As duas séries coincidem nesta unidade. O dado disponível não estabelece direção
+                causal entre carência e cancelamento. Carência é medida em disciplina e turma —
+                nenhum identificador de profissional é usado.
+              </p>
+            </div>
           )}
 
           {ctx && ctx.comparisons.length > 0 && (
@@ -374,7 +540,20 @@ export default function Escola() {
             </p>
           ))}
 
-          <Link className="btn" to={`/comparar?cre=${identity.cre}`}>
+          {takesAdr(identity.school_type) && (
+            <Link
+              className="btn"
+              to={`/recomposicao?cre=${identity.cre}&escola=${encodeURIComponent(identity.school_id)}`}
+            >
+              Recomposição por turma
+            </Link>
+          )}
+          {fundamental && (
+            <Link className="btn ghost" to={`/fluxo?cre=${identity.cre}`}>
+              Fluxo na {identity.cre}ª CRE
+            </Link>
+          )}
+          <Link className="btn ghost" to={`/comparar?cre=${identity.cre}`}>
             Comparar na {identity.cre}ª CRE
           </Link>
           <Link className="btn ghost" to="/mapa">

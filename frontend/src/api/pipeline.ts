@@ -12,6 +12,7 @@
  */
 
 import { getSchoolMap } from './client';
+import { isFundamental } from '../domain/units';
 import type { QualityStatus, SchoolMapFeature } from './types';
 
 const FIXTURE_NOTE =
@@ -46,12 +47,27 @@ export const DISCIPLINAS = [
   'Educação Física',
 ];
 
-/** Tipos que fazem parte do Ensino Fundamental regular. */
-export function isFundamental(schoolType: string | null | undefined): boolean {
-  if (!schoolType) return false;
-  const t = schoolType.toLowerCase();
-  if (t.includes('especial')) return false;
-  return t.includes('escola municipal') || t.includes('ciep') || t.includes('cívico') || t.includes('civico');
+export { isFundamental } from '../domain/units';
+
+/**
+ * Recorte compartilhado. Os três relatórios respondem à mesma pergunta em três
+ * escopos: rede, CRE e unidade. Escola é escopo de primeira classe — o gestor
+ * que clicou numa escola no mapa precisa do mesmo corte que vê na rede.
+ */
+async function scopedFeatures(
+  cre?: number | null,
+  schoolId?: string | null,
+): Promise<SchoolMapFeature[]> {
+  const map = await getSchoolMap();
+  let out = map.features;
+  if (schoolId) out = out.filter((f) => f.properties.identity.school_id === schoolId);
+  else if (cre) out = out.filter((f) => f.properties.identity.cre === cre);
+  return out.filter((f) => isFundamental(f.properties.identity.school_type));
+}
+
+function scopeLabel(cre?: number | null, schoolId?: string | null, nome?: string): string {
+  if (schoolId) return nome ?? 'unidade';
+  return cre ? `${cre}ª CRE` : 'rede municipal';
 }
 
 /* ============================================================
@@ -109,10 +125,11 @@ function flowFor(f: SchoolMapFeature): FlowRow {
   };
 }
 
-export async function getFlow(cre?: number | null): Promise<FlowReport | null> {
-  const map = await getSchoolMap();
-  const scoped = (cre ? map.features.filter((f) => f.properties.identity.cre === cre) : map.features)
-    .filter((f) => isFundamental(f.properties.identity.school_type));
+export async function getFlow(
+  cre?: number | null,
+  schoolId?: string | null,
+): Promise<FlowReport | null> {
+  const scoped = await scopedFeatures(cre, schoolId);
   if (scoped.length === 0) return null;
 
   const rows = scoped.map(flowFor).sort((a, b) => a.saldo - b.saldo);
@@ -120,7 +137,7 @@ export async function getFlow(cre?: number | null): Promise<FlowReport | null> {
 
   return {
     origin: 'fixture',
-    scope_label: cre ? `${cre}ª CRE` : 'rede municipal',
+    scope_label: scopeLabel(cre, schoolId, scoped[0].properties.identity.nome),
     rows,
     totals: {
       matricula_base: sum((r) => r.matricula_base),
@@ -160,10 +177,11 @@ export interface StaffingGapReport {
   limitations: string[];
 }
 
-export async function getStaffingGap(cre?: number | null): Promise<StaffingGapReport | null> {
-  const map = await getSchoolMap();
-  const scoped = (cre ? map.features.filter((f) => f.properties.identity.cre === cre) : map.features)
-    .filter((f) => isFundamental(f.properties.identity.school_type));
+export async function getStaffingGap(
+  cre?: number | null,
+  schoolId?: string | null,
+): Promise<StaffingGapReport | null> {
+  const scoped = await scopedFeatures(cre, schoolId);
   if (scoped.length === 0) return null;
 
   const rows = DISCIPLINAS.map((disciplina) => {
@@ -207,7 +225,7 @@ export async function getStaffingGap(cre?: number | null): Promise<StaffingGapRe
 
   return {
     origin: 'fixture',
-    scope_label: cre ? `${cre}ª CRE` : 'rede municipal',
+    scope_label: scopeLabel(cre, schoolId, scoped[0].properties.identity.nome),
     rows,
     limitations: [
       FIXTURE_NOTE,
@@ -237,10 +255,11 @@ export interface GradeReport {
   limitations: string[];
 }
 
-export async function getByGrade(cre?: number | null): Promise<GradeReport | null> {
-  const map = await getSchoolMap();
-  const scoped = (cre ? map.features.filter((f) => f.properties.identity.cre === cre) : map.features)
-    .filter((f) => isFundamental(f.properties.identity.school_type));
+export async function getByGrade(
+  cre?: number | null,
+  schoolId?: string | null,
+): Promise<GradeReport | null> {
+  const scoped = await scopedFeatures(cre, schoolId);
   if (scoped.length === 0) return null;
 
   const baseAttendance =
@@ -249,7 +268,7 @@ export async function getByGrade(cre?: number | null): Promise<GradeReport | nul
       .reduce((a, b) => a + b, 0) / scoped.length;
 
   const rows = GRADES.map((grade, i) => {
-    const rand = mulberry32(hashSeed(`grade:${cre ?? 'net'}:${grade}`));
+    const rand = mulberry32(hashSeed(`grade:${schoolId ?? cre ?? 'net'}:${grade}`));
     const anosFinais = i >= 5; // 6º ano em diante
     // a quebra da transição: o 6º ano concentra a perda
     const transition = i === 5 ? 1 : 0;
@@ -272,7 +291,7 @@ export async function getByGrade(cre?: number | null): Promise<GradeReport | nul
 
   return {
     origin: 'fixture',
-    scope_label: cre ? `${cre}ª CRE` : 'rede municipal',
+    scope_label: scopeLabel(cre, schoolId, scoped[0].properties.identity.nome),
     rows,
     limitations: [
       FIXTURE_NOTE,

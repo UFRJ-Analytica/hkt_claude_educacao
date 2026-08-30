@@ -17,12 +17,14 @@ import type {
   SchoolMapCollection,
   SchoolMapFeature,
 } from '../api/types';
-import { INDICATOR_ORDER } from './indicators';
+import { INDICATOR_ORDER, isNotApplicable } from './indicators';
 
 export interface CreCell {
   value: number | null;
   readable: number;
   blocked: number;
+  /** Unidades que não fazem esta medição. Não entram no denominador. */
+  not_applicable: number;
   degraded: number;
   series: number[] | null;
   delta: number | null;
@@ -44,7 +46,9 @@ export interface NetworkSnapshot {
 }
 
 function emptyCell(): CreCell {
-  return { value: null, readable: 0, blocked: 0, degraded: 0, series: null, delta: null };
+  return {
+    value: null, readable: 0, blocked: 0, not_applicable: 0, degraded: 0, series: null, delta: null,
+  };
 }
 
 function aggregate(features: SchoolMapFeature[]): Record<IndicatorId, CreCell> {
@@ -57,6 +61,13 @@ function aggregate(features: SchoolMapFeature[]): Record<IndicatorId, CreCell> {
 
     for (const f of features) {
       const m = f.properties.metrics[id];
+      // Equipamento que não faz a medição sai do denominador. Somá-lo a "sem
+      // leitura" inflaria a lacuna com unidades que nunca deveriam ter o dado,
+      // e transformaria um fato da rede numa pendência de cobertura.
+      if (isNotApplicable(m)) {
+        cell.not_applicable += 1;
+        continue;
+      }
       if (!m || m.value === null || m.quality_status === 'BLOCKED') {
         cell.blocked += 1;
         continue;
@@ -143,6 +154,7 @@ export function rowsFromSnapshots(
           value: o.quality === 'BLOCKED' ? null : o.value,
           readable,
           blocked: Math.max(0, o.coverage_denominator - readable),
+          not_applicable: 0,
           degraded: o.quality === 'DEGRADED' ? readable : 0,
           series: null,
           delta: null,

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { getSchoolMap, getSituations, mapOrigin } from '../api/client';
+import { getSchoolMap, mapOrigin } from '../api/client';
+import { COMPONENT_LABELS, getSignals } from '../domain/signals';
 import { getNetworkLessonDelivery } from '../api/turmas';
 import AulaEntregue from '../components/AulaEntregue';
 import { deriveSnapshot } from '../domain/network';
@@ -28,11 +29,11 @@ const LEVEL_LABEL: Record<string, string> = {
 
 export default function Hoje() {
   const map = useQuery({ queryKey: ['map'], queryFn: getSchoolMap });
-  const sits = useQuery({ queryKey: ['situations'], queryFn: getSituations });
+  const sigs = useQuery({ queryKey: ['signals'], queryFn: getSignals });
   const lessons = useQuery({ queryKey: ['lessons', 'network'], queryFn: () => getNetworkLessonDelivery(null) });
   const navigate = useNavigate();
 
-  if (!map.data || !sits.data) return <Loading />;
+  if (!map.data || !sigs.data) return <Loading label="cruzando sinais" />;
 
   const snap = deriveSnapshot(map.data);
   const attendance = snap.totals.attendance_rate;
@@ -40,7 +41,8 @@ export default function Hoje() {
   const assessment = snap.totals.assessment_score;
   const cov = map.data.coverage;
 
-  const readable = sits.data.filter((s) => s.level !== 'unreadable').length;
+  const signals = sigs.data.signals;
+  const readable = signals.filter((s) => s.level !== 'unreadable').length;
   const blockedUnits = assessment.blocked;
 
   return (
@@ -83,7 +85,12 @@ export default function Hoje() {
         </div>
         <div className="st mut">
           <div className="k">Desempenho</div>
-          <div className="v">{blockedUnits > 0 ? `${blockedUnits} un. sem leitura` : 'leitura completa'}</div>
+          <div className="v">
+            {blockedUnits > 0 ? `${blockedUnits} un. sem leitura` : 'leitura completa'}
+            {assessment.not_applicable > 0 && (
+              <em>{assessment.not_applicable.toLocaleString('pt-BR')} não fazem a avaliação</em>
+            )}
+          </div>
         </div>
       </div>
 
@@ -93,46 +100,68 @@ export default function Hoje() {
           municipal
         </div>
         <h2>
-          {sits.data.length === readable
-            ? `${sits.data.length} situações mudaram.`
-            : `${sits.data.length} situações mudaram. ${sits.data.length - readable === 1 ? 'Uma delas não pode ser lida.' : `${sits.data.length - readable} não podem ser lidas.`}`}
+          {signals.length === readable
+            ? `${signals.length} situações pedem atenção.`
+            : `${signals.length} situações pedem atenção. ${signals.length - readable === 1 ? 'Uma delas não pode ser lida.' : `${signals.length - readable} não podem ser lidas.`}`}
         </h2>
       </div>
 
+      <div className="derivedinline">
+        <b>Priorização derivada no cliente.</b> O endpoint governado{' '}
+        <span className="mono">GET /api/v1/network/signals</span> ainda não existe. Os cinco
+        componentes ficam visíveis em cada sinal — um score único não pode esconder cobertura.
+      </div>
+
       <div className="sits">
-        {sits.data.map((s, i) => {
-          const blocked = s.level === 'unreadable';
-          const index = blocked ? '—' : String(sits.data.slice(0, i + 1).filter((x) => x.level !== 'unreadable').length).padStart(2, '0');
+        {signals.map((s, i) => {
+          const blocked = s.blocked;
+          const index = blocked
+            ? '—'
+            : String(signals.slice(0, i + 1).filter((x) => !x.blocked).length).padStart(2, '0');
           return (
             <button
-              key={s.id}
+              key={s.signal_id}
               type="button"
               className={`sit${blocked ? ' blocked' : ''}`}
-              onClick={() => (s.cre ? navigate(`/comparar?cre=${s.cre}`) : undefined)}
+              onClick={() => navigate(`/comparar?cre=${s.cre}`)}
             >
               <div className={`n${blocked ? ' void' : ''}`}>{index}</div>
               <div>
                 <h4>{s.title}</h4>
                 <div className="meta">
                   {s.meta}
-                  {s.blockedReason ? ` · ${s.blockedReason}` : ''}
+                  {s.blocked_reason ? ` · ${s.blocked_reason}` : ''}
                 </div>
                 <span className="agentchip">
                   <i />
-                  {s.agent}
+                  {s.agent} · {s.contributing_indicators.join(' + ')}
                 </span>
               </div>
               <div className="side">
                 {blocked ? (
                   <span className="hatchbar" />
                 ) : (
-                  <span className={`gauge ${s.level}`}>
-                    <i style={{ width: `${Math.round((s.confidence ?? 0.5) * 100)}%` }} />
-                  </span>
+                  <div className="decomp">
+                    {COMPONENT_LABELS.map(([key, label]) => (
+                      <div className={`dm${key === 'confidence' ? ' conf' : ''}`} key={key}>
+                        <div className="lab">{label}</div>
+                        <div className="track">
+                          <i
+                            className="fill"
+                            style={{ width: `${Math.round(s.components[key] * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
                 <div className="glab">
                   <span>{LEVEL_LABEL[s.level]}</span>
-                  <b>{s.confidence === null ? 'ver o que falta' : `confiança ${Math.round(s.confidence * 100)}%`}</b>
+                  <b>
+                    {blocked
+                      ? 'ver o que falta'
+                      : `confiança ${Math.round(s.components.confidence * 100)}%`}
+                  </b>
                 </div>
               </div>
             </button>

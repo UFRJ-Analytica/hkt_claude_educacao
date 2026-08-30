@@ -47,9 +47,58 @@ class IdentityLookup(StrictModel):
         return tuple((field, value) for field, value in ordered if value is not None)
 
 
+class SchoolCensus(StrictModel):
+    """Censo Escolar do INEP para uma escola. Dado oficial, público e datado.
+
+    `reference_year` viaja com o registro, não só no envelope: um número real
+    sem o ano de referência é um número sem régua, e a interface precisa poder
+    dizer "matrícula de 2024" ao lado de um indicador sintético de hoje.
+
+    Todos os campos são contagens agregadas por escola. Ausência do bloco inteiro
+    significa que a unidade não tem ponte com o Censo — ou porque não é escola
+    (biblioteca, núcleo de arte, clube escolar), ou porque não constava no ano.
+    """
+
+    inep_id: str = Field(pattern=r"^\d{8}$")
+    inep_name: str = Field(min_length=1, max_length=256)
+    reference_year: int = Field(ge=2007, le=2100)
+    source_kind: Literal[SourceKind.REAL_PUBLIC] = SourceKind.REAL_PUBLIC
+
+    enrolment_total: int | None = Field(default=None, ge=0)
+    enrolment_infant: int | None = Field(default=None, ge=0)
+    enrolment_fundamental: int | None = Field(default=None, ge=0)
+    enrolment_fundamental_early: int | None = Field(default=None, ge=0)
+    enrolment_fundamental_late: int | None = Field(default=None, ge=0)
+    enrolment_special: int | None = Field(default=None, ge=0)
+    #: Matrícula por ano de escolaridade, do 1º ao 9º. `None` numa posição
+    #: significa que a escola não oferece aquele ano.
+    enrolment_by_grade: tuple[int | None, ...] = ()
+
+    classes_total: int | None = Field(default=None, ge=0)
+    classes_fundamental: int | None = Field(default=None, ge=0)
+    teachers_total: int | None = Field(default=None, ge=0)
+    teachers_fundamental: int | None = Field(default=None, ge=0)
+
+    rooms_used: int | None = Field(default=None, ge=0)
+    rooms_climatised: int | None = Field(default=None, ge=0)
+    rooms_accessible: int | None = Field(default=None, ge=0)
+    student_devices: int | None = Field(default=None, ge=0)
+
+    #: Infraestrutura declarada. `None` = não informado no Censo.
+    infrastructure: dict[str, bool | None] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_grades(self) -> "SchoolCensus":
+        if self.enrolment_by_grade and len(self.enrolment_by_grade) != 9:
+            raise ValueError("enrolment_by_grade must cover the nine fundamental grades")
+        return self
+
+
 class CanonicalSchoolRecord(StrictModel):
     identity: SchoolIdentity
     coordinates: Coordinates | None = None
+    #: Bloco do Censo quando há ponte; ausente quando não há.
+    census: SchoolCensus | None = None
 
 
 class OfficialSchoolListQuery(StrictModel):
@@ -72,9 +121,23 @@ class OfficialSchoolListCoverage(StrictModel):
         return self
 
 
+class CensusRelease(StrictModel):
+    """Proveniência da release do Censo que alimentou esta resposta."""
+
+    snapshot_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reference_year: int = Field(ge=2007, le=2100)
+    source_id: Literal["inep_school_census"] = "inep_school_census"
+    source_kind: Literal[SourceKind.REAL_PUBLIC] = SourceKind.REAL_PUBLIC
+    matched: int = Field(ge=0)
+    source_urls: tuple[str, ...] = ()
+    limitations: tuple[str, ...] = ()
+
+
 class OfficialSchoolList(StrictModel):
     records: tuple[CanonicalSchoolRecord, ...]
     coverage: OfficialSchoolListCoverage
+    #: Ausente quando a release do Censo não está publicada.
+    census_release: CensusRelease | None = None
     available_cres: tuple[int, ...]
     snapshot_id: str = Field(pattern=r"^[0-9a-f]{64}$")
     generated: bool

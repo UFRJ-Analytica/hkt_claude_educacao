@@ -4,7 +4,14 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { getSchoolMap } from '../api/client';
 import { getSchoolContext } from '../api/analytics';
 import type { IndicatorId, SchoolMapFeature } from '../api/types';
-import { INDICATORS, INDICATOR_ORDER, attentionOf, thresholdLegend, type Attention } from '../domain/indicators';
+import {
+  INDICATORS,
+  INDICATOR_ORDER,
+  attentionOf,
+  isNotApplicable,
+  thresholdLegend,
+  type Attention,
+} from '../domain/indicators';
 import { RIO_SOURCE } from '../domain/rio-geometry';
 import {
   HOME,
@@ -16,6 +23,7 @@ import {
   type Viewport,
 } from '../domain/projection';
 import { Loading } from '../components';
+import { takesAdr } from '../api/turmas';
 
 const FILL: Record<Attention, string> = {
   none: 'var(--ink-4)',
@@ -154,7 +162,15 @@ export default function Mapa() {
   const counts: Record<Attention, number> = {
     none: 0, low: 0, attention: 0, critical: 0, degraded: 0, unreadable: 0,
   };
-  for (const f of shown) counts[attentionOf(f.properties.metrics[indicator])] += 1;
+  // "não se aplica" e "sem leitura" caem os dois em `unreadable` na cor, porque
+  // nos dois casos não há número a pintar. Na legenda eles se separam: um é
+  // fato consumado, o outro é lacuna a cobrar.
+  let notApplicable = 0;
+  for (const f of shown) {
+    const m = f.properties.metrics[indicator];
+    counts[attentionOf(m)] += 1;
+    if (isNotApplicable(m)) notApplicable += 1;
+  }
 
   // desenha do menos ao mais grave: o que pede atencao fica por cima
   const ordered = [...shown].sort(
@@ -429,19 +445,50 @@ export default function Mapa() {
               <span className="realtag">identidade real</span>
             </div>
 
-            <div className={`covermini${selectedContext.data?.metric_coverage.status === 'IDENTITY_ONLY' ? ' identityonly' : ''}`}>
+            {/* O ponto no mapa já está pintado por um indicador desta unidade.
+                Dizer aqui "sem indicadores" enquanto a cor afirma o contrário é
+                incoerente — o card mostra os mesmos números que pintaram o dot. */}
+            <div className="selmetrics">
+              {INDICATOR_ORDER.map((iid) => {
+                const m = sel.properties.metrics[iid];
+                const spec = INDICATORS[iid];
+                const blocked = !m || m.value === null;
+                return (
+                  <div className="selrow" key={iid}>
+                    <span className="nm">{spec.label}</span>
+                    {blocked ? (
+                      <span className="hatchbar mini" />
+                    ) : (
+                      <span className="bar mini">
+                        <i
+                          className={attentionOf(m)}
+                          style={{
+                            width: `${Math.max(0, Math.min(1, (m.value! - spec.scale[0]) / (spec.scale[1] - spec.scale[0]))) * 100}%`,
+                          }}
+                        />
+                      </span>
+                    )}
+                    <span className={`mono sv${blocked ? ' off' : ''}`}>
+                      {isNotApplicable(m)
+                        ? 'não se aplica'
+                        : blocked
+                          ? 'sem leitura'
+                          : spec.format(m.value!)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="covermini">
               <span className="mono">
-                {selectedContext.isFetching
-                  ? 'carregando contexto…'
-                  : selectedContext.data?.metric_coverage.status === 'IDENTITY_ONLY'
-                    ? 'sem indicadores carregados'
-                    : selectedContext.data?.metric_coverage.status === 'SYNTHETIC_SNAPSHOT_MATCHED'
-                      ? 'indicadores de demonstração'
-                      : 'contexto local'}
+                {selectedContext.isFetching ? 'carregando contexto…' : 'indicadores de demonstração'}
               </span>
               <p>
-                {selectedContext.data?.metric_coverage.message ??
-                  'Identidade, CRE, tipo e coordenada vêm do cadastro real. Abra a Escola 360 para ver cobertura e plano de ação.'}
+                {selectedContext.data?.metric_coverage.status === 'IDENTITY_ONLY'
+                  ? 'Identidade, CRE, tipo e coordenada são reais. O snapshot do backend não tem métrica para este identificador — os números acima vêm da camada de demonstração local, a mesma que define a cor do ponto.'
+                  : (selectedContext.data?.metric_coverage.message ??
+                    'Identidade, CRE, tipo e coordenada vêm do cadastro real. Os indicadores acima são de demonstração.')}
               </p>
             </div>
 
@@ -471,6 +518,19 @@ export default function Mapa() {
             <Link className="btn solid" to={`/escola/${sel.properties.identity.school_id}`}>
               Abrir Escola 360 + plano IA
             </Link>
+            {takesAdr(sel.properties.identity.school_type) ? (
+              <Link
+                className="btn"
+                to={`/recomposicao?cre=${sel.properties.identity.cre}&escola=${encodeURIComponent(sel.properties.identity.school_id)}`}
+              >
+                Recomposição por turma
+              </Link>
+            ) : (
+              <p className="cardnote">
+                Esta unidade não participa da avaliação diagnóstica — não há matriz de habilidades
+                para ela.
+              </p>
+            )}
           </aside>
         )}
 
@@ -485,8 +545,14 @@ export default function Mapa() {
             ))}
             <span>
               <i className="hatch" />
-              sem leitura {counts.unreadable}
+              sem leitura {counts.unreadable - notApplicable}
             </span>
+            {notApplicable > 0 && (
+              <span title="Equipamentos que não fazem esta medição — o dado não existe, não está faltando.">
+                <i className="hatch" />
+                não se aplica {notApplicable}
+              </span>
+            )}
           </div>
           <div className="legrule">
             {spec.label} · {thresholdLegend(spec)}

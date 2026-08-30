@@ -16,8 +16,9 @@ Backend e frontend implementados e executáveis.
 |---|---|---|
 | Limite do município | IBGE, malhas territoriais v3, 3304557 | **real** |
 | Cadastro de escolas | Data.Rio/SME, CC-BY 4.0 | **real** — 1.588 unidades com coordenada, CREs 1–11 |
-| Código INEP | — | ausente na release Data.Rio |
-| Frequência, desempenho, ocupação, carência | gerado localmente | **sintético**, rotulado por métrica |
+| Código INEP | ponte pela designação SME | **real** — 1.546/1.588 (97,4%), chave exata |
+| Matrícula, turmas, docentes, infraestrutura | INEP, Censo Escolar 2024 | **real** — por escola e por ano de escolaridade |
+| Frequência, desempenho, carência, movimentação | gerado localmente | **sintético**, rotulado por métrica |
 
 A API declara `school-identity` como `AVAILABLE / REAL_PUBLIC`; todas as
 capacidades de indicador seguem em `SCHEMA_ONLY`. A interface mostra isso em
@@ -42,6 +43,7 @@ faixa fixa e no selo do topo. Dado sintético nunca é apresentado como real.
 Set-Location C:\Users\lucas\documents\claude-educacao\backend
 uv sync
 uv run python -m scripts.import_official_school_identity
+uv run python -m scripts.import_inep_census --year 2024
 $env:PULSO_MOCK_DATA_ENABLED = 'false'
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```

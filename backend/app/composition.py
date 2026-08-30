@@ -15,6 +15,7 @@ from app.contracts.provenance import SourceKind
 from app.core.config import Settings
 from app.core.errors import register_error_handlers
 from app.data_access.duckdb_adapter import DuckDBDataAccess
+from app.data_access.inep_census_adapter import InepCensusAdapter
 from app.data_access.ports import DataAccessPort, SchoolIdentityPort
 from app.data_access.school_identity_adapter import CuratedSchoolIdentityAdapter
 from app.intake.middleware import IntakeBodyLimitMiddleware
@@ -215,7 +216,10 @@ def _school_identity_resolver(
 ) -> SchoolIdentityResolver | None:
     try:
         repository = identity_port or CuratedSchoolIdentityAdapter()
-        return SchoolIdentityResolver(repository)
+        # O Censo é opcional por construção: sem release publicada o resolver
+        # segue de pé servindo só identidade, e a interface continua honesta
+        # sobre o que não tem. Dado real ausente não pode derrubar a tela.
+        return SchoolIdentityResolver(repository, InepCensusAdapter())
     except (
         IdentityDatasetUnavailableError,
         ValueError,

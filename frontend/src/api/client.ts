@@ -107,7 +107,7 @@ function composeFromOfficial(official: OfficialSchoolCollection): SchoolMapColle
       missing += 1;
       continue;
     }
-    const { metrics, enrolment } = syntheticMetricsFor(r.identity.school_id, r.identity.cre);
+    const { metrics, enrolment } = syntheticMetricsFor(r.identity.school_id, r.identity.cre, r.identity.school_type);
     features.push({
       type: 'Feature',
       geometry: {
