@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { mascararCpf } from '@/domain/cpf';
 import { formatarDataBr } from '@/domain/grupamento';
 import { CRITERIOS_POR_ID } from '@/domain/prioridade';
+import { percentualRisco, riscoDaUnidade } from '@/mocks/risco';
 import { cn } from '@/lib/utils';
 
 const STATUS: Record<StatusInscricao, { rotulo: string; cls: string }> = {
@@ -88,6 +89,9 @@ export function Acompanhar() {
 
   const conv = insc?.convocacao;
   const prazo = conv ? restante(conv.prazo) : null;
+  // Risco de não-alocação da 1ª opção, previsto pelo modelo XGBoost do BigQuery.
+  const primeiraOpcao = insc?.classificacao?.porOpcao[0] ?? null;
+  const risco = primeiraOpcao ? riscoDaUnidade(primeiraOpcao.unidadeId) : null;
 
   return (
     <>
@@ -206,6 +210,17 @@ export function Acompanhar() {
             {insc.status === 'documentos_pendentes' ? (
               <Aviso tipo="warn" titulo="Há documento pendente" className="mb-4">
                 Envie pela inscrição ou leve o original à creche da 1ª opção. Sem ele, os pontos do critério não valem na classificação.
+              </Aviso>
+            ) : null}
+
+            {risco && primeiraOpcao ? (
+              <Aviso
+                tipo={risco.nivel === 'alto' ? 'warn' : 'ok'}
+                titulo={risco.nivel === 'alto' ? `Risco alto de não conseguir vaga na ${primeiraOpcao.unidadeNome}` : `Risco baixo na ${primeiraOpcao.unidadeNome}`}
+                className="mb-4"
+              >
+                O modelo estima {percentualRisco(risco)} de chance de a alocação não se confirmar nessa creche
+                {risco.nivel === 'alto' ? ' — vale manter opções de demanda menor na sua lista.' : '.'}
               </Aviso>
             ) : null}
 

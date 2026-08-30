@@ -12,6 +12,7 @@ import { formatarDistancia, RIO_CENTRO } from '@/domain/geo';
 import { classificarIdade } from '@/domain/grupamento';
 import { cn } from '@/lib/utils';
 import { acharBairro } from '@/mocks/bairros';
+import { percentualRisco, riscoDaUnidade, type RiscoUnidade } from '@/mocks/risco';
 import { MapaUnidades } from './MapaUnidades';
 import { usePasso } from './usePasso';
 
@@ -185,7 +186,10 @@ export function PassoUnidades() {
                   </button>
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-2">
-                  {focada.oferta ? <DemandaTag demanda={focada.oferta.demanda} /> : null}
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    {focada.oferta ? <DemandaTag demanda={focada.oferta.demanda} /> : null}
+                    <RiscoTag risco={riscoDaUnidade(focada.id)} detalhe />
+                  </span>
                   <BotaoEscolher escolhidas={escolhidas} id={focada.id} onClick={() => alternar(focada.id)} />
                 </div>
               </div>
@@ -241,6 +245,7 @@ export function PassoUnidades() {
                           {u.oferta ? (
                             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                               <DemandaTag demanda={u.oferta.demanda} />
+                              <RiscoTag risco={riscoDaUnidade(u.id)} detalhe={foco === u.id} />
                               <span className="text-[12px] text-ink-2 tnum">
                                 {u.oferta.vagas} vagas · {u.oferta.vagasPrioritarias} prioritárias · {u.oferta.inscritos} inscritos
                               </span>
@@ -318,6 +323,24 @@ export function PassoUnidades() {
         </DrawerPopup>
       </Drawer>
     </>
+  );
+}
+
+function RiscoTag({ risco, detalhe }: { risco: RiscoUnidade | null; detalhe?: boolean }) {
+  if (!risco) return null;
+  const alto = risco.nivel === 'alto';
+  return (
+    <span
+      className={cn(
+        'inline-flex h-6 items-center gap-1 rounded-full px-2 text-[11px] font-semibold',
+        alto ? 'bg-warn-soft text-warn' : 'bg-ok-soft text-ok',
+      )}
+      title={`Chance de a alocação não se confirmar: ${percentualRisco(risco)}`}
+    >
+      <i className={cn('size-2 rounded-full', alto ? 'bg-warn' : 'bg-ok')} aria-hidden="true" />
+      risco {risco.nivel}
+      {detalhe ? ` · ${percentualRisco(risco)}` : ''}
+    </span>
   );
 }
 
