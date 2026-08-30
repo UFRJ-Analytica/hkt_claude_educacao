@@ -27,11 +27,15 @@ import {
   mockRegistrarComparecimento,
   mockRegistrarDesfecho,
   mockRegistrarMensagem,
+  mockAlternativas,
+  mockPanorama,
   mockRegistrarCobranca,
   mockRegistrarValidacao,
   mockResumoUnidade,
   type Cobranca,
+  type FiltrosPanorama,
   type NovaValidacao,
+  type Panorama,
 } from '../mocks/creche';
 import { MODELOS } from '../mocks/modelos';
 import type { ApiSource, CriterioId, DocumentoAnalise, Endereco, Grupamento, Horario, Inscricao, Unidade, UnidadeProxima } from './types';
@@ -265,4 +269,14 @@ export async function registrarCobranca(codigo: string, criterio: CriterioId, ca
 /** A família pode alterar a lista de creches até o fechamento da matrícula. */
 export async function atualizarOpcoes(codigo: string, opcoes: string[], aceitaRealocacao: boolean): Promise<Inscricao | null> {
   return (await live<Inscricao>(`/inscricoes/${encodeURIComponent(codigo)}/opcoes`, { method: 'PATCH', body: JSON.stringify({ opcoes, aceitaRealocacao }), headers: JSON_HEADERS }, 'inscricao')) ?? mockAtualizarOpcoes(codigo, opcoes, aceitaRealocacao);
+}
+
+/* ---------- Secretaria ---------- */
+export async function panorama(f: FiltrosPanorama): Promise<Panorama> {
+  const extra: Record<string, string> = {};
+  if (f.cre !== null) extra.cre = String(f.cre);
+  return (await live<Panorama>(`/panorama${qs(f, extra)}`, undefined, 'fila')) ?? mockPanorama(f);
+}
+export function alternativas(unidadeId: string, f: FiltrosUnidade) {
+  return mockAlternativas(unidadeId, f);
 }

@@ -48,6 +48,7 @@ export function MapaUnidades({
   onFoco,
   className,
   zoomPelaRoda = true,
+  zoom = 13,
 }: {
   centro: [number, number];
   unidades: UnidadeProxima[];
@@ -57,8 +58,8 @@ export function MapaUnidades({
   className?: string;
   /** No desktop a roda do mouse rola a página; o zoom fica nos botões. */
   zoomPelaRoda?: boolean;
+  zoom?: number;
 }) {
-  const zoom = 13;
   const marcadores = useMemo(
     () =>
       unidades.map((u) => {

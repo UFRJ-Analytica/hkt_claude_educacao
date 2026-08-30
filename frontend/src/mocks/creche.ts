@@ -22,7 +22,8 @@ import type {
 } from '../api/types';
 import { CRITERIOS, CRITERIOS_POR_ID, pontuar } from '../domain/prioridade';
 import { JANELA_DESFAZER_MS, somarDiasUteis } from '../domain/validacao';
-import { BAIRROS, normalizar } from './bairros';
+import { BAIRROS, CRE_NOMES, normalizar } from './bairros';
+import { haversineKm } from '../domain/geo';
 import { aplicarComparecimentoNaFamilia, aplicarValidacaoNaFamilia, atualizarTelefoneDaFamilia, registrarCobrancaNaFamilia, todasInscricoesLocais } from './inscricoes';
 import { todasUnidades, unidadePorId } from './unidades';
 import { META as UNIDADES_META } from './unidades.generated';
@@ -646,4 +647,129 @@ export function limparRegistrosDaDirecao(): void {
   } catch {
     /* nada */
   }
+}
+
+/* ---------- Secretaria: panorama da rede (tela de acompanhamento) ---------- */
+
+export interface PanoramaOferta {
+  grupamento: Grupamento;
+  horario: Horario;
+  inscritos: number;
+  emEspera: number;
+  confirmados: number;
+  vagas: number;
+}
+export interface PanoramaUnidade {
+  id: string;
+  nome: string;
+  cre: number;
+  bairro: string;
+  lat: number;
+  lon: number;
+  inscritos: number;
+  emEspera: number;
+  confirmados: number;
+  vagas: number;
+  /** crianças por vaga preenchida (proxy); null sem dado */
+  pressao: number | null;
+  risco: number | null;
+  ofertas: PanoramaOferta[];
+}
+export interface Panorama {
+  inscritos: number;
+  emEspera: number;
+  convocacoesAbertas: number;
+  semResposta: number;
+  porCre: Array<{ cre: number; nome: string; unidades: number; inscritos: number; emEspera: number }>;
+  unidades: PanoramaUnidade[];
+  fonte: string;
+}
+export interface FiltrosPanorama extends FiltrosUnidade {
+  cre: number | null;
+}
+
+function ofertasDaUnidade(u: Unidade, f: FiltrosUnidade): PanoramaOferta[] {
+  return filtrar(u.ofertas, f).map((o) => {
+    const real = filaReal(u, o);
+    const confirmados = Math.min(o.vagas, real.confirmados);
+    return { grupamento: o.grupamento, horario: o.horario, inscritos: real.inscritos, emEspera: Math.max(0, real.inscritos - confirmados), confirmados, vagas: o.vagas };
+  });
+}
+
+function unidadePanorama(u: Unidade, f: FiltrosUnidade): PanoramaUnidade | null {
+  const ofertas = ofertasDaUnidade(u, f);
+  if (ofertas.length === 0) return null;
+  const inscritos = ofertas.reduce((s, o) => s + o.inscritos, 0);
+  const confirmados = ofertas.reduce((s, o) => s + o.confirmados, 0);
+  const vagas = ofertas.reduce((s, o) => s + o.vagas, 0);
+  return {
+    id: u.id,
+    nome: u.nome,
+    cre: u.cre,
+    bairro: u.bairro,
+    lat: u.lat,
+    lon: u.lon,
+    inscritos,
+    emEspera: ofertas.reduce((s, o) => s + o.emEspera, 0),
+    confirmados,
+    vagas,
+    pressao: confirmados > 0 ? inscritos / confirmados : null,
+    risco: riscoDaUnidade(u.id)?.risco ?? null,
+    ofertas,
+  };
+}
+
+export async function mockPanorama(f: FiltrosPanorama): Promise<Panorama> {
+  const base = todasUnidades().filter((u) => f.cre === null || u.cre === f.cre);
+  const unidades = base.map((u) => unidadePanorama(u, f)).filter((x): x is PanoramaUnidade => x !== null);
+  let convocacoesAbertas = 0;
+  let semResposta = 0;
+  const agora = Date.now();
+  for (const u of base) {
+    for (const c of todasChamadas(u)) {
+      if (f.grupamento && c.crianca.grupamento !== f.grupamento) continue;
+      if (f.horario && c.crianca.horario !== f.horario) continue;
+      if (c.situacao === 'encerrada') continue;
+      const vencida = new Date(c.prazo).getTime() < agora;
+      if (!vencida) convocacoesAbertas += 1;
+      const falou = c.respostaApp !== null || c.tentativas.some((t) => t.desfecho === 'falei');
+      if (vencida && !falou) semResposta += 1;
+    }
+  }
+  const porCre = Object.keys(CRE_NOMES)
+    .map(Number)
+    .map((cre) => {
+      const us = unidades.filter((u) => u.cre === cre);
+      return { cre, nome: CRE_NOMES[cre], unidades: us.length, inscritos: us.reduce((s, u) => s + u.inscritos, 0), emEspera: us.reduce((s, u) => s + u.emEspera, 0) };
+    });
+  return {
+    inscritos: unidades.reduce((s, u) => s + u.inscritos, 0),
+    emEspera: unidades.reduce((s, u) => s + u.emEspera, 0),
+    convocacoesAbertas,
+    semResposta,
+    porCre,
+    unidades: unidades.sort((a, b) => (b.pressao ?? -1) - (a.pressao ?? -1)),
+    fonte: notaFonteFila(),
+  };
+}
+
+/** Creches vizinhas (2 km) com vaga livre no MESMO grupamento e turno. */
+export function mockAlternativas(unidadeId: string, f: FiltrosUnidade, raioKm = 2): Array<{ unidade: PanoramaUnidade; distanciaKm: number; vagasLivres: number; par: string }> {
+  const u = unidadePorId(unidadeId);
+  if (!u) return [];
+  const minhas = ofertasDaUnidade(u, f);
+  const out: Array<{ unidade: PanoramaUnidade; distanciaKm: number; vagasLivres: number; par: string }> = [];
+  for (const v of todasUnidades()) {
+    if (v.id === u.id) continue;
+    const d = haversineKm(u.lat, u.lon, v.lat, v.lon);
+    if (d > raioKm) continue;
+    const pv = unidadePanorama(v, f);
+    if (!pv) continue;
+    for (const o of pv.ofertas) {
+      if (!minhas.some((m) => m.grupamento === o.grupamento && m.horario === o.horario)) continue;
+      const livres = o.vagas - o.confirmados;
+      if (livres > 0) out.push({ unidade: pv, distanciaKm: d, vagasLivres: livres, par: `${o.grupamento} · ${o.horario}` });
+    }
+  }
+  return out.sort((a, b) => a.distanciaKm - b.distanciaKm).slice(0, 8);
 }
