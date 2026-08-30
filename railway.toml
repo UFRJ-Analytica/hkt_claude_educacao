@@ -1,18 +1,20 @@
 [build]
 builder = "RAILPACK"
 buildCommand = """
-case "$RAILWAY_SERVICE_NAME" in
-  frontend)
+SERVICE_TARGET="$(printf '%s' "${RAILWAY_DEPLOY_TARGET:-$RAILWAY_SERVICE_NAME}" | tr '[:upper:]' '[:lower:]')"
+case "$SERVICE_TARGET" in
+  frontend|*frontend*)
     if [ -d frontend ]; then cd frontend; fi
     npm ci
     npm run build
     ;;
-  backend)
+  backend|*backend*)
     if [ -d backend ]; then cd backend; fi
-    uv sync --frozen
+    python -m pip install --upgrade pip
+    python -m pip install --no-cache-dir -r requirements.txt
     ;;
   *)
-    echo "Configure o nome do servico Railway como 'frontend' ou 'backend'." >&2
+    echo "Configure RAILWAY_DEPLOY_TARGET como 'frontend' ou 'backend'." >&2
     exit 1
     ;;
 esac
@@ -20,17 +22,18 @@ esac
 
 [deploy]
 startCommand = """
-case "$RAILWAY_SERVICE_NAME" in
-  frontend)
+SERVICE_TARGET="$(printf '%s' "${RAILWAY_DEPLOY_TARGET:-$RAILWAY_SERVICE_NAME}" | tr '[:upper:]' '[:lower:]')"
+case "$SERVICE_TARGET" in
+  frontend|*frontend*)
     if [ -d frontend ]; then cd frontend; fi
     npx vite preview --host 0.0.0.0 --port "${PORT:-4173}"
     ;;
-  backend)
+  backend|*backend*)
     if [ -d backend ]; then cd backend; fi
-    uv run uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
+    python -m uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
     ;;
   *)
-    echo "Configure o nome do servico Railway como 'frontend' ou 'backend'." >&2
+    echo "Configure RAILWAY_DEPLOY_TARGET como 'frontend' ou 'backend'." >&2
     exit 1
     ;;
 esac
