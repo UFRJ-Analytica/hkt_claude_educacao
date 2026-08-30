@@ -103,8 +103,8 @@ export function Secretaria() {
 
   return (
     <>
-      <TopBar voltarPara="/" />
-      <Page largo className="pt-4">
+      <TopBar voltarPara="/" cheio />
+      <Page cheio className="pt-4">
         <header className="mb-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-3">Secretaria Municipal de Educação · acompanhamento</p>
           <h1 className="text-[24px] font-bold tracking-tight text-ink">Inscrições e convocações na rede</h1>
@@ -136,7 +136,7 @@ export function Secretaria() {
           ))}
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_440px] 2xl:grid-cols-[minmax(0,1fr)_520px]">
           <div>
             <div className="relative overflow-hidden rounded-2xl border border-line shadow-e2">
               <MapaUnidades centro={centro} unidades={pontos} selecionadas={[]} focoId={sel} onFoco={setSel} zoom={unidadeSel ? 14 : cre !== null ? 12 : 10} zoomPelaRoda={false} className="h-[52vh] min-h-[320px]" />

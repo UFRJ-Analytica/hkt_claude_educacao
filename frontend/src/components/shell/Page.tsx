@@ -2,9 +2,10 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 /** Coluna de leitura: 100% no celular, 560px centrada no desktop. */
-export function Page({ children, className, comRodape = false, largo = false }: { children: ReactNode; className?: string; comRodape?: boolean; largo?: boolean }) {
+/** `largo` = 1100px (escolha de creches); `cheio` = tela de mesa, sem teto de largura e com margem lateral pequena. */
+export function Page({ children, className, comRodape = false, largo = false, cheio = false }: { children: ReactNode; className?: string; comRodape?: boolean; largo?: boolean; cheio?: boolean }) {
   return (
-    <main className={cn('step-in mx-auto w-full px-[var(--pad-x)] pt-5', largo ? 'max-w-[1100px]' : 'max-w-page', comRodape ? 'pb-[calc(var(--bottombar-h)+48px)]' : 'pb-12', className)}>
+    <main className={cn('step-in mx-auto w-full pt-5', cheio ? 'max-w-none px-4 lg:px-6 2xl:px-8' : largo ? 'max-w-[1100px] px-[var(--pad-x)]' : 'max-w-page px-[var(--pad-x)]', comRodape ? 'pb-[calc(var(--bottombar-h)+48px)]' : 'pb-12', className)}>
       {children}
     </main>
   );

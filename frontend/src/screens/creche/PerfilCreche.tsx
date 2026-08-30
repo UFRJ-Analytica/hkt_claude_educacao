@@ -96,8 +96,8 @@ export function PerfilCreche() {
 
   return (
     <>
-      <TopBar voltarPara="/" />
-      <Page largo comRodape={false} className="pt-4">
+      <TopBar voltarPara="/" cheio />
+      <Page cheio comRodape={false} className="pt-4">
         {/* identificação */}
         <header className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
