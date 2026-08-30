@@ -1,0 +1,11 @@
+# Nenhum dado de criança (mesmo sintético) é versionado.
+# O extrato bruto e os parquets ficam só em disco local.
+data/
+*.csv
+*.parquet
+*.json.gz
+
+# O overlay agregado (out/) É versionável: só agregados e proveniência,
+# nenhuma linha individual. Mantido explicitamente.
+!out/
+!out/**

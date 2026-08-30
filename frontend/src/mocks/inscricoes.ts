@@ -1,5 +1,6 @@
-import type { Convocacao, EventoTimeline, Inscricao, PosicaoOpcao } from '../api/types';
-import { pontuar } from '../domain/prioridade';
+import type { Convocacao, CriterioId, EstadoValidacao, EventoTimeline, Inscricao, MotivoRecusa, PosicaoOpcao } from '../api/types';
+import { CRITERIOS_POR_ID, pontuar } from '../domain/prioridade';
+import { MOTIVO_LABEL } from '../domain/validacao';
 import { todasUnidades, unidadePorId } from './unidades';
 
 /**
@@ -208,4 +209,73 @@ function inscricaoDemo(codigo: string): Inscricao | null {
   db[codigo] = base;
   gravar(db);
   return base;
+}
+
+/* ---------- Ponte com o perfil da creche ---------- */
+
+export function todasInscricoesLocais(): Inscricao[] {
+  return Object.values(ler());
+}
+
+/**
+ * A validação feita pela unidade aparece no histórico da família e altera a
+ * pontuação (critério recusado sai da conta) e a posição estimada.
+ */
+export function aplicarValidacaoNaFamilia(codigo: string, criterio: CriterioId, estado: EstadoValidacao, motivo?: MotivoRecusa, observacao?: string): void {
+  const db = ler();
+  const insc = db[codigo];
+  if (!insc) return;
+  const c = CRITERIOS_POR_ID[criterio];
+  const recusados = new Set(insc.criteriosRecusados ?? []);
+  if (estado === 'recusado') recusados.add(criterio);
+  else recusados.delete(criterio);
+  insc.criteriosRecusados = [...recusados];
+  insc.pontuacao = pontuar(insc.criterios.filter((id) => !recusados.has(id)));
+  insc.classificacao = { atualizadoEm: new Date().toISOString(), porOpcao: preClassificar(insc) };
+  const agora = new Date().toISOString();
+  if (estado === 'confirmado') {
+    insc.timeline.push({ em: agora, titulo: `Critério confirmado pela unidade: ${c.titulo}`, detalhe: observacao || 'Documento conferido. Os pontos já valem na classificação.', tipo: 'ok' });
+  } else if (estado === 'recusado') {
+    insc.timeline.push({ em: agora, titulo: `Critério não aceito pela unidade: ${c.titulo}`, detalhe: `${motivo ? MOTIVO_LABEL[motivo] : 'Sem motivo informado'}${observacao ? ` — ${observacao}` : ''}. Você pode contestar na unidade ou enviar outro documento pelo app.`, tipo: 'warn' });
+  } else {
+    insc.timeline.push({ em: agora, titulo: `Validação desfeita pela unidade: ${c.titulo}`, detalhe: 'O critério voltou a aguardar conferência.', tipo: 'info' });
+  }
+  db[codigo] = insc;
+  gravar(db);
+}
+
+export function aplicarComparecimentoNaFamilia(codigo: string, resultado: 'matriculou' | 'nao_compareceu'): void {
+  const db = ler();
+  const insc = db[codigo];
+  if (!insc || !insc.convocacao) return;
+  const agora = new Date().toISOString();
+  if (resultado === 'matriculou') {
+    insc.status = 'matriculada';
+    insc.timeline.push({ em: agora, titulo: 'Matrícula concluída na unidade', detalhe: `${insc.convocacao.unidadeNome} confirmou a matrícula.`, tipo: 'ok' });
+  } else {
+    insc.status = 'prazo_expirado';
+    insc.timeline.push({ em: agora, titulo: 'Prazo encerrado sem comparecimento', detalhe: 'A vaga foi oferecida à próxima família. A inscrição continua ativa nas outras opções.', tipo: 'danger' });
+  }
+  db[codigo] = insc;
+  gravar(db);
+}
+
+export function atualizarTelefoneDaFamilia(codigo: string, telefone: string): void {
+  const db = ler();
+  const insc = db[codigo];
+  if (!insc) return;
+  insc.responsavel.telefone = telefone;
+  insc.timeline.push({ em: new Date().toISOString(), titulo: 'Telefone atualizado pela unidade', detalhe: `Novo contato: ${telefone}.`, tipo: 'info' });
+  db[codigo] = insc;
+  gravar(db);
+}
+
+export function registrarCobrancaNaFamilia(codigo: string, documento: string): void {
+  const db = ler();
+  const insc = db[codigo];
+  if (!insc) return;
+  insc.timeline.push({ em: new Date().toISOString(), titulo: 'A unidade pediu um documento', detalhe: `${documento}. Envie a foto pelo app ou leve o original à unidade.`, tipo: 'warn' });
+  if (insc.status === 'recebida' || insc.status === 'pre_classificada') insc.status = 'documentos_pendentes';
+  db[codigo] = insc;
+  gravar(db);
 }

@@ -5,7 +5,7 @@ import { Acompanhar } from './screens/Acompanhar';
 import { Confirmacao } from './screens/Confirmacao';
 import { Inicio } from './screens/Inicio';
 import { NaoEncontrado } from './screens/NaoEncontrado';
-import { PaginaCreche } from './screens/PaginaCreche';
+import { PerfilCreche } from './screens/creche/PerfilCreche';
 import { Portal } from './screens/Portal';
 import { PassoCrianca } from './screens/passos/PassoCrianca';
 import { PassoDocumentos } from './screens/passos/PassoDocumentos';
@@ -32,7 +32,7 @@ export function App() {
         <Route path="/" element={<Portal />} />
         <Route path="/app" element={<Inicio />} />
         <Route path="/app/*" element={<Navigate to="/app" replace />} />
-        <Route path="/creche" element={<PaginaCreche />} />
+        <Route path="/creche" element={<PerfilCreche />} />
         <Route path="/inscricao" element={<Navigate to="/inscricao/crianca" replace />} />
         <Route path="/inscricao/crianca" element={<PassoCrianca />} />
         <Route path="/inscricao/responsavel" element={<PassoResponsavel />} />
