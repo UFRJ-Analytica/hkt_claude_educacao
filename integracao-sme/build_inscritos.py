@@ -34,6 +34,8 @@ PROJECT = "rio-sme"
 DATASET = "sme_creche"
 TABLE = f"{PROJECT}.{DATASET}.inscricoes_completa"
 
+TIPO_META = "{ gerado: boolean; generated_at: string | null; source_id: string; query: string | null; ofertas: number; inscricoes: number; processo?: number | null; inscricoes_por_ano?: Record<string, number> }"
+
 GRUPAMENTO_CANON = {
     "bercario": "Berçário",
     "berçário": "Berçário",
@@ -44,7 +46,31 @@ GRUPAMENTO_CANON = {
 }
 
 
+def _rest_json(sql: str) -> list[dict]:
+    """Sem `bq` instalado: usa a API REST com o token do `gcloud auth login`."""
+    import urllib.request
+
+    token = subprocess.run(["gcloud", "auth", "print-access-token"], capture_output=True, text=True, check=True).stdout.strip()
+    body = {"query": sql, "useLegacySql": False, "maxResults": 100000, "timeoutMs": 180000}
+    req = urllib.request.Request(
+        f"https://bigquery.googleapis.com/bigquery/v2/projects/{PROJECT}/queries",
+        data=json.dumps(body).encode(),
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=240) as r:
+        d = json.load(r)
+    if not d.get("jobComplete"):
+        raise SystemExit("consulta não concluída no tempo limite (jobComplete=false)")
+    names = [f["name"] for f in d["schema"]["fields"]]
+    rows = [{n: c["v"] for n, c in zip(names, row["f"])} for row in d.get("rows", [])]
+    return rows
+
+
 def bq_json(sql: str) -> list[dict]:
+    import shutil
+
+    if shutil.which("bq") is None:
+        return _rest_json(sql)
     proc = subprocess.run(
         ["bq", "query", "--use_legacy_sql=false", "--format=json", "--max_rows=100000", sql],
         capture_output=True,
@@ -90,9 +116,11 @@ def main() -> None:
       {(", " + ", ".join(extras)) if extras else ""}
     FROM `{TABLE}`
     WHERE unidade_codigo IS NOT NULL AND grupamento IS NOT NULL
+      AND ano = (SELECT MAX(ano) FROM `{TABLE}`)
     GROUP BY 1, 2, 3
     ORDER BY 1, 2, 3
     """
+    anos = bq_json(f"SELECT ano, COUNT(*) AS n FROM `{TABLE}` GROUP BY ano ORDER BY ano")
     rows = bq_json(sql)
     fila: dict[str, dict] = {}
     total = 0
@@ -120,15 +148,18 @@ def main() -> None:
         "query": " ".join(sql.split()),
         "ofertas": len(fila),
         "inscricoes": total,
+        "processo": max(int(a["ano"]) for a in anos) if anos else None,
+        "inscricoes_por_ano": {str(a["ano"]): int(a["n"]) for a in anos},
     }
     ts = (
         "// GERADO por integracao-sme/build_inscritos.py — NÃO editar à mão.\n"
+        f"// Processo (ano) mais recente: {meta['processo']} · inscrições por ano: {meta['inscricoes_por_ano']}\n"
         f"// Fonte: {TABLE} · agregado no BigQuery (GROUP BY unidade, grupamento, turno), sem LIMIT.\n"
         f"// Gerado em: {gerado_em} · ofertas: {len(fila)} · inscrições: {total}\n"
         "// REAL: inscritos, prioritarios, confirmados" + (", porOpcao" if tem_opcao else "") + ". Linhas por criança seguem sintéticas.\n"
         "import type { Grupamento, Horario } from '../api/types';\n\n"
         "export interface FilaOferta {\n  inscritos: number;\n  prioritarios: number;\n  confirmados: number;\n  porOpcao?: number[];\n}\n\n"
-        f"export const INSCRITOS_META = {json.dumps(meta, ensure_ascii=False, indent=2)};\n\n"
+        f"export const INSCRITOS_META: {TIPO_META} = {json.dumps(meta, ensure_ascii=False, indent=2)};\n\n"
         f"export const FILA_POR_OFERTA: Record<string, FilaOferta> = {json.dumps(fila, ensure_ascii=False, indent=2)};\n\n"
         "export function chaveOferta(unidadeId: string, grupamento: Grupamento, horario: Horario): string {\n"
         "  return `${unidadeId}|${grupamento}|${horario}`;\n}\n"
@@ -138,7 +169,7 @@ def main() -> None:
     OUT_PROV.write_text(
         "# Proveniência — inscritos.generated.ts\n\n"
         f"- Gerado em: {gerado_em}\n- Fonte: `{TABLE}`\n- Agregação: GROUP BY unidade_codigo, grupamento, turno (no BigQuery, sem LIMIT)\n"
-        f"- Ofertas: {len(fila)} · inscrições contadas: {total}\n\n"
+        f"- Ofertas: {len(fila)} · inscrições contadas: {total} (processo {meta['processo']}; por ano: {meta['inscricoes_por_ano']})\n\n"
         "## Classificação\n- inscritos / prioritarios / confirmados"
         + (" / porOpcao" if tem_opcao else "")
         + ": **REAL** sobre o extrato (que é sintético, `_synthetic=true`).\n"

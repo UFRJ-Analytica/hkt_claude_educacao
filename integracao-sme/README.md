@@ -38,6 +38,19 @@ O `frontend/src/mocks/unidades.ts` exporta as mesmas funções de sempre
 sintético de unidades foi removido: sem o arquivo gerado, o módulo falha
 explicitamente pedindo o pipeline, em vez de inventar uma rede.
 
+## Sem `bq`: agregação direto no BigQuery (API REST)
+
+`build_unidades.py --bigquery` e `build_inscritos.py` rodam as agregações **dentro do
+BigQuery** pela API REST, com o token de `gcloud auth login` (`gcloud auth print-access-token`).
+Não precisam do `bq` CLI nem do parquet local, não usam `LIMIT` e nenhuma linha de criança
+sai do BigQuery. Pré-requisitos: `gcloud` instalado, `gcloud auth login`,
+`gcloud config set project rio-sme`, papéis BigQuery Job User + Data Viewer no dataset.
+
+```bash
+python3 integracao-sme/build_unidades.py --bigquery   # rede completa (808 unidades, processo mais recente)
+python3 integracao-sme/build_inscritos.py             # fila por oferta (inscritos, prioritários, confirmados)
+```
+
 ## Fila completa por oferta (perfil da creche)
 
 `build_inscritos.py` agrega **no BigQuery** (GROUP BY unidade × grupamento × turno, sem

@@ -1,9 +1,9 @@
 # Proveniência — unidades.generated.json
 
-- Gerado em: 2026-08-30T17:22:49+00:00
+- Gerado em: 2026-08-30T18:59:10+00:00
 - Fonte: `rio-sme.sme_creche.inscricoes_completa`
-- Query: `SELECT * FROM `rio-sme.sme_creche.inscricoes_completa` LIMIT 1000`
-- Unidades: 352  ·  inscrições agregadas: 999
+- Query: `SELECT unidade_codigo, grupamento, turno, COUNT(*), prioritarios FROM `rio-sme.sme_creche.inscricoes_completa` WHERE ano = MAX(ano) GROUP BY unidade, grupamento, turno (agregado no BigQuery, sem LIMIT)`
+- Unidades: 808  ·  inscrições agregadas: 10439
 
 ## Classificação por campo
 

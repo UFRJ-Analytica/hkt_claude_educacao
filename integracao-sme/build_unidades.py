@@ -35,7 +35,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import duckdb
 
 HERE = Path(__file__).resolve().parent
 PARQUET = HERE / "data" / "inscricoes_completa.parquet"
@@ -44,7 +43,9 @@ OUT_JSON = HERE.parent / "frontend" / "src" / "mocks" / "unidades.generated.ts"
 OUT_PROV = HERE / "out" / "PROVENANCE_unidades.md"
 
 TABLE = "rio-sme.sme_creche.inscricoes_completa"
-QUERY = f"SELECT * FROM `{TABLE}` LIMIT 1000"
+QUERY_PARQUET = f"SELECT * FROM `{TABLE}` LIMIT 1000"
+QUERY_BIGQUERY = f"SELECT unidade_codigo, grupamento, turno, COUNT(*), prioritarios FROM `{TABLE}` WHERE ano = MAX(ano) GROUP BY unidade, grupamento, turno (agregado no BigQuery, sem LIMIT)"
+QUERY = QUERY_PARQUET
 
 # Grupamentos canônicos aceitos pelo tipo `Grupamento` do frontend.
 GRUPAMENTOS_CANON = {
@@ -130,8 +131,54 @@ def derivar_vagas(inscritos: int, prioritarios: int, seed: int) -> tuple[int, in
     return vagas, vagas_prio
 
 
-def build() -> dict[str, Any]:
-    bairros = load_bairros()
+def fetch_bigquery() -> tuple[list[tuple], list[tuple]]:
+    """Mesmas duas agregações, rodadas no BigQuery (API REST com o token do gcloud),
+    sem baixar linha de criança e sem LIMIT. Ofertas contam o processo mais recente."""
+    from build_inscritos import bq_json
+
+    unidade_rows_raw = bq_json(
+        f"""
+        SELECT
+          unidade_codigo,
+          AVG(latitude) AS lat,
+          AVG(longitude) AS lon,
+          APPROX_TOP_COUNT(bairro_final, 1)[SAFE_OFFSET(0)].value AS bairro,
+          APPROX_TOP_COUNT(zona, 1)[SAFE_OFFSET(0)].value AS zona,
+          COUNT(*) AS inscritos_total
+        FROM `{TABLE}`
+        WHERE unidade_codigo IS NOT NULL AND latitude IS NOT NULL AND longitude IS NOT NULL
+        GROUP BY unidade_codigo
+        ORDER BY unidade_codigo
+        """
+    )
+    oferta_rows_raw = bq_json(
+        f"""
+        SELECT
+          unidade_codigo,
+          grupamento,
+          (horario_integral >= 0.5) AS integral,
+          COUNT(*) AS inscritos,
+          COUNTIF(tipo_inscricao = 'Prioridade') AS prioritarios
+        FROM `{TABLE}`
+        WHERE unidade_codigo IS NOT NULL AND grupamento IS NOT NULL
+          AND ano = (SELECT MAX(ano) FROM `{TABLE}`)
+        GROUP BY 1, 2, 3
+        """
+    )
+    unidade_rows = [
+        (int(r["unidade_codigo"]), float(r["lat"]), float(r["lon"]), r["bairro"], r["zona"], int(r["inscritos_total"]))
+        for r in unidade_rows_raw
+    ]
+    oferta_rows = [
+        (int(r["unidade_codigo"]), r["grupamento"], str(r["integral"]).lower() == "true", int(r["inscritos"]), int(r["prioritarios"] or 0))
+        for r in oferta_rows_raw
+    ]
+    return unidade_rows, oferta_rows
+
+
+def fetch_parquet() -> tuple[list[tuple], list[tuple]]:
+    import duckdb
+
     con = duckdb.connect()
     safe = str(PARQUET).replace("'", "''")
     con.execute(f"CREATE VIEW t AS SELECT * FROM read_parquet('{safe}')")
@@ -167,6 +214,12 @@ def build() -> dict[str, Any]:
         """
     ).fetchall()
     con.close()
+    return unidade_rows, oferta_rows
+
+
+def build(fonte: str) -> dict[str, Any]:
+    bairros = load_bairros()
+    unidade_rows, oferta_rows = fetch_bigquery() if fonte == "bigquery" else fetch_parquet()
 
     ofertas_por_unidade: dict[int, list[dict[str, Any]]] = {}
     for cod, grup, integral, inscritos, prioritarios in oferta_rows:
@@ -218,7 +271,7 @@ def build() -> dict[str, Any]:
         "_meta": {
             "generated_at": generated_at,
             "source_id": TABLE,
-            "query": QUERY,
+            "query": QUERY_BIGQUERY if fonte == "bigquery" else QUERY_PARQUET,
             "rows_read": sum(o["inscritos"] for u in unidades for o in u["ofertas"]),
             "unidades": len(unidades),
             "provenance": {
@@ -280,9 +333,12 @@ def write_provenance(payload: dict[str, Any]) -> None:
 
 
 def main() -> None:
-    if not PARQUET.exists():
-        raise SystemExit(f"parquet não encontrado: {PARQUET}. Rode extract.py primeiro.")
-    payload = build()
+    import sys
+
+    # Sem parquet local (ou com --bigquery): agrega direto no BigQuery, sem LIMIT.
+    fonte = "bigquery" if ("--bigquery" in sys.argv or not PARQUET.exists()) else "parquet"
+    print(f"fonte: {fonte}")
+    payload = build(fonte)
 
     unidades = payload["unidades"]
     meta = payload["_meta"]
