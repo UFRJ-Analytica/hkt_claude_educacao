@@ -82,6 +82,28 @@ function CartaoDocumento({ criterio, analise, onArquivo, contexto }: { criterio:
   );
 }
 
+/**
+ * Miniatura da foto (máx. 640 px, JPEG) guardada junto da inscrição: é o que a
+ * unidade abre quando a pré-análise pede conferência. PDF não gera miniatura.
+ */
+async function miniaturaDe(f: File): Promise<string | null> {
+  if (!f.type.startsWith('image/')) return null;
+  try {
+    const bitmap = await createImageBitmap(f);
+    const escala = Math.min(1, 640 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * escala));
+    canvas.height = Math.max(1, Math.round(bitmap.height * escala));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    return canvas.toDataURL('image/jpeg', 0.72);
+  } catch {
+    return null;
+  }
+}
+
 export function PassoDocumentos() {
   const p = usePasso('documentos');
   const { r, patch, criterios } = p;
@@ -92,8 +114,8 @@ export function PassoDocumentos() {
     setErro(null);
     patch('documentos', { [criterio]: { status: 'analisando', motivo: '', camposLidos: {}, analisadoEm: new Date().toISOString() } });
     try {
-      const res = await preAnalisarDocumento(criterio, f, contexto);
-      patch('documentos', { [criterio]: res });
+      const [res, miniatura] = await Promise.all([preAnalisarDocumento(criterio, f, contexto), miniaturaDe(f)]);
+      patch('documentos', { [criterio]: { ...res, miniatura: miniatura ?? undefined, nomeArquivo: f.name } });
     } catch {
       patch('documentos', { [criterio]: { status: 'pendente', motivo: '', camposLidos: {}, analisadoEm: new Date().toISOString() } });
       setErro('Não foi possível analisar agora. Você pode tentar de novo ou levar o documento à unidade.');

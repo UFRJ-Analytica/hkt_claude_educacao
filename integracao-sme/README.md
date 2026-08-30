@@ -38,6 +38,18 @@ O `frontend/src/mocks/unidades.ts` exporta as mesmas funções de sempre
 sintético de unidades foi removido: sem o arquivo gerado, o módulo falha
 explicitamente pedindo o pipeline, em vez de inventar uma rede.
 
+## Fila completa por oferta (perfil da creche)
+
+`build_inscritos.py` agrega **no BigQuery** (GROUP BY unidade × grupamento × turno, sem
+`LIMIT`) e emite `frontend/src/mocks/inscritos.generated.ts`: inscritos, prioritários,
+confirmados e, se a view tiver `opcao`, a distribuição por 1ª–5ª opção. Nada por criança
+sai do BigQuery. O perfil da creche (`/creche`) usa esses números quando o arquivo está
+gerado; sem ele, usa as contagens (amostrais) de `unidades.generated.ts` e avisa no rodapé.
+
+```bash
+python3 integracao-sme/build_inscritos.py     # requer `bq` autenticado
+```
+
 ## Executar
 
 ```bash
