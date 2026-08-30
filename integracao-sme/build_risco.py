@@ -15,10 +15,12 @@ Definições (código determinístico, nunca LLM):
   piso   = unidades com < 5 inscrições ficam FORA (ausência de dado não é
            zero; média sobre 1–4 inscrições não sustenta leitura)
 
-Proveniência: o modelo foi treinado sobre o extrato SINTÉTICO (_synthetic=true)
-— todo risco aqui é DERIVADO DE SINTÉTICO (métricas de treino: AUC 0.741,
-acurácia 0.678). Serve para demonstrar o mecanismo, nunca como estatística
-operacional da SME.
+Proveniência: o modelo foi treinado sobre o extrato SINTÉTICO
+(_synthetic=true) — todo risco aqui é **DERIVADO DE SINTÉTICO**
+(métricas de treino pós-retreino com freq_unidade: AUC 0.737, acurácia
+0.677). Serve para demonstrar o mecanismo (agora incluindo a feature
+frequência-de-inscrições-por-unidade que faz o risco elevar-se com mais
+demanda), nunca como estatística operacional da SME.
 """
 
 from __future__ import annotations
@@ -40,6 +42,11 @@ SOURCE = "rio-sme.sme_creche.inscricoes_completa"
 MIN_INSCRICOES = 5
 CORTE_ALTO = 0.50
 
+# O modelo foi TREINADO com as features de `inscricoes_completa` + `freq_unidade`
+# (frequência de inscrições por unidade). ML.PREDICT precisa receber a MESMA
+# lista de colunas: `t.*` não expõe `freq_unidade` pro PR, então o SELECT
+# abaixo inclui a feature explicitamente (via JOIN). Sem ela o predict falha
+# com "Column freq_unidade is not found in the input data to the PR".
 SQL = f"""
 WITH pred AS (
   SELECT
@@ -47,7 +54,21 @@ WITH pred AS (
     (SELECT p.prob FROM UNNEST(predicted_confirmado_probs) p WHERE p.label = 1) AS prob_aloc
   FROM ML.PREDICT(
     MODEL `{MODEL}`,
-    (SELECT * FROM `{SOURCE}` WHERE unidade_codigo IS NOT NULL)
+    (
+      SELECT
+        t.unidade_codigo, t.ano, t.mes_inscricao, t.idade_meses, t.sexo,
+        t.grupamento, t.horario_integral, t.n_opcoes, t.n_respostas_sim,
+        t.score_socioeconomico, t.zona, t.latitude, t.longitude,
+        t.indice_perigo_synthetic, f.freq_unidade
+      FROM `{SOURCE}` t
+      JOIN (
+        SELECT unidade_codigo, COUNT(*) AS freq_unidade
+        FROM `{SOURCE}`
+        WHERE unidade_codigo IS NOT NULL
+        GROUP BY unidade_codigo
+      ) f USING (unidade_codigo)
+      WHERE t.unidade_codigo IS NOT NULL
+    )
   )
 )
 SELECT
@@ -100,7 +121,7 @@ def main() -> None:
         "unidades": len(riscos),
         "corte_alto": CORTE_ALTO,
         "min_inscricoes": MIN_INSCRICOES,
-        "treino_metricas": {"rocAuc": 0.7411, "accuracy": 0.6781, "f1": 0.7218},
+        "treino_metricas": {"rocAuc": 0.7368, "accuracy": 0.6769, "f1": 0.7393},
         "derivado_de_sintetico": True,
         "aviso": (
             "Risco DERIVADO DE dados SINTÉTICOS via modelo XGBoost demonstrativo; "
@@ -140,7 +161,7 @@ def main() -> None:
                 f"- Consulta: ML.PREDICT sobre `{SOURCE}` (todas as inscrições com unidade)",
                 f"- Unidades com risco: {len(riscos)} (piso de {MIN_INSCRICOES} inscrições)",
                 f"- Nível alto (risco ≥ {CORTE_ALTO}): {n_alto} unidades · baixo: {len(riscos) - n_alto}",
-                "- Métricas de treino: AUC 0.7411 · acurácia 0.6781 · F1 0.7218",
+                "- Métricas de treino (modelo com freq_unidade): AUC 0.7368 · acurácia 0.6769 · F1 0.7393",
                 "",
                 "## Classificação",
                 "- risco/nível: **DERIVADO DE SINTÉTICO** — modelo treinado sobre o extrato",
