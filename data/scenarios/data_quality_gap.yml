@@ -1,8 +1,0 @@
-version: 1.0.0
-privacy_classification: AGGREGATE_NO_PII
-id: data_quality_gap
-label: Lacuna de qualidade
-narrative: Cobertura sintética incompleta para exercitar bloqueios de interpretação.
-seed: 20260831
-parameters: {attendance_trend: 0.0, assessment_trend: 0.0, capacity_pressure: 0.0, shortage_factor: 1.0, quality_gap: 0.25}
-expected_signals: [coverage_degraded, interpretation_blocked]

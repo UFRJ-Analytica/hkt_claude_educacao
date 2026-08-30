@@ -1,72 +1,52 @@
 # Política do diretório de dados
 
-A Etapa 2 inclui catálogos e cenários YAML versionados. Os fatos Parquet continuam locais,
-regeneráveis e ignorados pelo Git.
+**Este diretório não guarda dado.** Ele guarda a regra sobre onde o dado pode
+estar.
 
-## Zonas futuras
+## Onde o dado da SME fica
 
-- `catalog/`: metadados e registro de fontes revisados, sem linhas pessoais;
-- `reference/`: somente referências públicas aprovadas, com licença/origem;
-- `scenarios/`: definições versionáveis de cenários sintéticos, sem PII;
-- `generated/`: Parquet, DuckDB e resultados regeneráveis; ignorado pelo Git;
-- `official/`: releases locais curadas e content-addressed publicadas pelo time de dados; ignoradas pelo Git e consumidas pelo backend somente em leitura;
-- `private/`, `personal/`, `raw/`: bloqueados para versionamento e não devem ser criados sem governança institucional.
+O extrato da Inscrição Creche vem de
+[`CIT-SME-RJ/dadoscreche`](https://github.com/CIT-SME-RJ/dadoscreche/) e é
+clonado **fora deste repositório**:
 
-Diretórios vazios não são criados antecipadamente. Cada diretório versionado deverá conter README ou artefato justificável.
+```powershell
+git clone https://github.com/CIT-SME-RJ/dadoscreche
+```
+
+O backend o lê somente em leitura, pelo caminho em `PULSO_DADOSCRECHE_ROOT`
+(padrão `../dadoscreche`). Nenhum arquivo dele entra no Git — nem
+descompactado, nem amostrado, nem convertido para Parquet.
+
+Os dados são anonimizados pela SME (códigos artificiais para criança e
+responsável, nascimento só em ano-mês, endereço só em bairro e CEP). Anonimizado
+**não é** o mesmo que público: continua sendo dado de criança, e o repositório é
+público.
 
 ## Nunca versionar
 
-Dados pessoais ou sensíveis, arquivos recebidos do evento, uploads, bancos locais, CSV/XLSX/Parquet de fatos, chaves, tokens, logs, prompts/respostas brutas de modelo e tabelas de reidentificação. `.gitignore` é defesa adicional, não substitui revisão antes do commit.
+Dado pessoal ou sensível, arquivos recebidos do evento, uploads, bancos locais,
+CSV/XLSX/Parquet/GZ de fatos, chaves, tokens, logs, prompts e respostas brutas de
+modelo, e qualquer tabela que permita reidentificação.
 
-## Checklist de entrada
+`.gitignore` é defesa adicional, não substitui a revisão antes do commit. Rode
+`make safety-check` e depois confira `git diff --cached --name-only`.
 
-1. confirmar finalidade, custodiante e condições/licença;
-2. registrar origem, hash, recebimento, período, granularidade e retenção;
-3. inventariar/classificar campos e eliminar os desnecessários;
-4. separar identificadores e aplicar pseudonimização/agregação;
+## Zonas, se um dia forem criadas
+
+- `reference/`: apenas referências públicas aprovadas, com licença e origem;
+- `private/`, `personal/`, `raw/`: bloqueadas — não devem ser criadas sem
+  governança institucional.
+
+Diretório vazio não é criado antecipadamente. Todo diretório versionado precisa
+de um README ou de um artefato que se justifique.
+
+## Checklist de entrada, para qualquer fonte nova
+
+1. confirmar finalidade, custodiante e condições de licença;
+2. registrar origem, hash, data de recebimento, período e granularidade;
+3. inventariar campos e eliminar os desnecessários;
+4. separar identificadores e aplicar pseudonimização ou agregação;
 5. perfilar schema e qualidade em ambiente autorizado;
 6. obter validação humana do mapeamento;
-7. classificar proveniência e atualizar capability;
-8. guardar fatos apenas em área local ignorada ou storage aprovado.
-
-## Dados sintéticos
-
-`uv run python -m scripts.generate_mock` (em `backend/`) gera seis Parquets agregados em
-uma release imutável sob `data/generated/releases/`. `data/generated/current.json` é o único
-ponto de promoção: ele é substituído atomicamente somente depois da validação da release
-completa. Leitores internos resolvem esse ponteiro uma vez por instância e, durante uma nova
-geração, continuam vendo integralmente a release anterior ou passam a ver integralmente a nova;
-não dependem de symlink e nunca combinam arquivos de releases diferentes. Releases antigas são
-mantidas para leitores concorrentes já ativos e podem ser removidas apenas com política explícita
-de retenção. Seed + versão do cenário determinam linhas, bytes e SHA256; cada release contém seu
-`manifest.json`.
-Escolas usam IDs, nomes e coordenadas sintéticos plausíveis do município; não há nome, CPF,
-endereço ou coordenada de aluno. Cenários codificam correlações narrativas, nunca causalidade.
-
-### Cenários v2 e releases segregadas
-
-O cenário `scenarios/reinforcement_priority_v2.yml` simula queda combinada de frequência e
-aprendizagem, pressão de capacidade, carência docente mais visível e lacunas de qualidade.
-Ele foi criado para testar priorização de reforço/busca ativa e a disciplina de IA: explicar
-evidências e limitações sem decidir automaticamente recurso ou rotular escola/professor/aluno.
-
-Para gerar uma release segregada por cenário, sem mexer no ponteiro default:
-
-```bash
-cd backend
-uv run python -m scripts.generate_mock --scenario ../data/scenarios/reinforcement_priority_v2.yml --release-namespace scenario
-```
-
-Isso publica em:
-
-```text
-data/generated/scenarios/reinforcement_priority_v2/current.json
-  -> data/generated/scenarios/reinforcement_priority_v2/releases/<generation_id>/
-```
-
-O modo default continua publicando em `data/generated/current.json` para compatibilidade com o
-runtime atual.
-
-## Remoção e incidente
-
-A exclusão segue owner, finalidade e prazo registrados. Em vazamento, interromper processamento e seguir [privacidade e segurança](../docs/architecture/privacy-and-safety.md). Proveniência completa está em [data-provenance](../docs/architecture/data-provenance.md).
+7. classificar a proveniência e atualizar a capability correspondente;
+8. guardar os fatos apenas em área local ignorada ou em storage aprovado.

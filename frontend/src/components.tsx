@@ -1,116 +1,22 @@
 import type { ReactNode } from 'react';
-import type { Capability, SchoolMetric } from './api/types';
-import { INDICATORS, type Attention } from './domain/indicators';
+import type { Capability } from './api/types';
 
-export function Sparkline({
-  series,
-  level,
-  width = 66,
-  height = 20,
-  domain,
-}: {
-  series: number[] | null | undefined;
-  level: Attention;
-  width?: number;
-  height?: number;
-  /** Domínio compartilhado pela coluna: sem ele, cada linha se auto-escala e
-   *  ruído vira sinal. Pequenos múltiplos só comparam sob a mesma escala. */
-  domain?: [number, number];
-}) {
-  if (!series || series.length < 2) {
-    return (
-      <span
-        className="blockcell"
-        style={{ width, height: 8 }}
-        title="Série temporal não faz parte do contrato atual do backend"
-      />
-    );
-  }
-  const min = domain ? domain[0] : Math.min(...series);
-  const max = domain ? domain[1] : Math.max(...series);
-  const span = max - min || 1;
-  const pts = series
-    .map((v, i) => {
-      const x = 1 + (i / (series.length - 1)) * (width - 2);
-      const y = height - 3 - ((v - min) / span) * (height - 6);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(' ');
-  const stroke =
-    level === 'critical'
-      ? 'var(--a3)'
-      : level === 'attention'
-        ? 'var(--a2)'
-        : level === 'low' || level === 'degraded'
-          ? 'var(--a1)'
-          : 'var(--ink-3)';
-  return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true">
-      <polyline points={pts} fill="none" stroke={stroke} strokeWidth="1.5" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-export function CoverageTicks({ ratio }: { ratio: number }) {
-  const filled = Math.round(ratio * 5);
-  const warn = ratio < 0.8;
-  return (
-    <span className="covtick" title={`cobertura ${(ratio * 100).toFixed(0)}%`}>
-      {[4, 6, 8, 10, 12].map((h, i) => (
-        <i key={h} className={i < filled ? (warn ? 'warn' : 'on') : ''} style={{ height: h }} />
-      ))}
-    </span>
-  );
-}
-
-export function MetricCell({ metric }: { metric: SchoolMetric | undefined }) {
-  if (!metric || metric.value === null || metric.quality_status === 'BLOCKED') {
-    return <span className="blockcell" title="Sem leitura: cobertura abaixo do limiar" />;
-  }
-  const spec = INDICATORS[metric.indicator_id];
-  const level = attention(metric);
-  const [min, max] = spec.scale;
-  const w = Math.max(0, Math.min(1, (metric.value - min) / (max - min))) * 100;
-  return (
-    <span className="cell">
-      <span className={`num${level === 'critical' ? ' worse' : level === 'attention' ? ' bad' : level === 'none' ? ' mut' : ''}`}>
-        {spec.format(metric.value)}
-      </span>
-      <span className="bar">
-        <i className={level} style={{ width: `${w}%` }} />
-      </span>
-    </span>
-  );
-}
-
-function attention(metric: SchoolMetric): Attention {
-  if (metric.quality_status === 'BLOCKED' || metric.value === null) return 'unreadable';
-  if (metric.quality_status === 'DEGRADED') return 'degraded';
-  const spec = INDICATORS[metric.indicator_id];
-  const [t1, t2, t3] = spec.thresholds;
-  const v = metric.value;
-  if (spec.worse === 'low') {
-    if (v < t3) return 'critical';
-    if (v < t2) return 'attention';
-    if (v < t1) return 'low';
-    return 'none';
-  }
-  if (v > t3) return 'critical';
-  if (v > t2) return 'attention';
-  if (v > t1) return 'low';
-  return 'none';
-}
+/**
+ * O que sobrou de compartilhado depois da limpeza: os estados que a interface
+ * precisa saber declarar. Sparkline, célula de métrica e barra de cobertura
+ * foram embora com os indicadores sintéticos que existiam para alimentá-las.
+ */
 
 export function CapabilityState({ capability, screen }: { capability?: Capability; screen: string }) {
   const status = capability?.status ?? 'UNAVAILABLE';
   const copy: Record<string, { title: string; body: string }> = {
     SCHEMA_ONLY: {
       title: 'A estrutura é conhecida. As linhas não chegaram.',
-      body: 'O schema deste domínio está mapeado, mas nenhuma linha de dado está disponível. Não há gráfico nem valor nesta tela — inventar um número aqui seria o erro que este produto existe para evitar.',
+      body: 'O schema deste domínio está mapeado, mas nenhuma linha de dado está conectada. Não há número nesta tela — inventar um aqui seria o erro que este produto existe para evitar.',
     },
     UNAVAILABLE: {
       title: 'Esta capacidade não tem pré-requisito atendido.',
-      body: 'A fonte ainda não foi confirmada, ou a base legal e a cobertura não foram verificadas. A rota continua acessível por link direto para explicar o que falta, em vez de devolver um erro genérico.',
+      body: 'A fonte ainda não foi confirmada, ou a base legal e a cobertura não foram verificadas. A rota continua acessível para explicar o que falta, em vez de devolver um erro genérico.',
     },
     DISABLED: {
       title: 'Módulo desabilitado por configuração.',
@@ -142,6 +48,21 @@ export function CapabilityState({ capability, screen }: { capability?: Capabilit
 
 export function Loading({ label = 'carregando' }: { label?: string }) {
   return <div className="loading">{label}…</div>;
+}
+
+export function Offline({ base }: { base: string }) {
+  return (
+    <div className="statepage">
+      <div className="k">
+        conexão · <span className="tag UNAVAILABLE">OFFLINE</span>
+      </div>
+      <h2>A API não respondeu.</h2>
+      <p>
+        A interface não substitui o backend por dado local. Suba a API em <span className="mono">{base}</span> e
+        recarregue.
+      </p>
+    </div>
+  );
 }
 
 export function Section({ children }: { children: ReactNode }) {

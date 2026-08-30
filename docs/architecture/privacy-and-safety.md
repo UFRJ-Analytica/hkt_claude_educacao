@@ -37,4 +37,4 @@ Interromper processamento, preservar evidências técnicas sem ampliar exposiç�
 
 ## Gate para dados do evento
 
-Antes da carga: confirmar finalidade e condições de uso; inventariar campos; classificar sensibilidade; remover campos desnecessários; definir acesso/retenção; validar agregação e exportação; atualizar [premissas](../product/premissas.md) e [registro de proveniência](data-provenance.md).
+Antes da carga: confirmar finalidade e condições de uso; inventariar campos; classificar sensibilidade; remover campos desnecessários; definir acesso/retenção; validar agregação e exportação; atualizar premissas e [registro de proveniência](data-provenance.md).

@@ -1,8 +1,0 @@
-version: 1.0.0
-privacy_classification: AGGREGATE_NO_PII
-id: capacity_pressure
-label: Pressão de capacidade
-narrative: Ocupação sintética elevada em parte da rede, sem atribuição causal.
-seed: 20260829
-parameters: {attendance_trend: 0.0, assessment_trend: 0.0, capacity_pressure: 0.18, shortage_factor: 1.0, quality_gap: 0.0}
-expected_signals: [capacity_high]

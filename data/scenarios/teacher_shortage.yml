@@ -1,8 +1,0 @@
-version: 1.0.0
-privacy_classification: AGGREGATE_NO_PII
-id: teacher_shortage
-label: Carência docente
-narrative: Horas sintéticas de carência elevadas sem identificar profissionais ou alegar causa.
-seed: 20260830
-parameters: {attendance_trend: 0.0, assessment_trend: 0.0, capacity_pressure: 0.0, shortage_factor: 2.2, quality_gap: 0.0}
-expected_signals: [teacher_shortage_high]
