@@ -8,6 +8,9 @@ dia sobre os dados reais dos processos de 2021 a 2025.
 Claude Impact Lab Rio #2 · desafio da Secretaria Municipal de Educação do Rio de
 Janeiro · 30/08/2026.
 
+
+<img width="2641" height="1325" alt="Screenshot from 2026-08-30 16-12-52" src="https://github.com/user-attachments/assets/ab234092-d5bd-4ecd-b338-6d8a1be0d181" />
+
 ## O problema que atacamos
 
 A creche é o único segmento racionado da educação infantil carioca: ~89 mil
@@ -63,6 +66,11 @@ alocação.
 | `/app` | responsável | inscrição mobile first em 6–8 passos, código de acompanhamento, resposta à convocação |
 | `/creche` | direção da unidade | validação critério a critério e convocação com desfecho obrigatório |
 | `/secretaria` | SME | panorama da rede: números do recorte, mapa por pressão, vizinhas com vaga |
+
+
+[Screencast from 2026-08-30 16-14-33.webm](https://github.com/user-attachments/assets/6c78d078-fd33-4e48-95d0-b813cf999bfc)
+[Screencast from 2026-08-30 16-12-15.webm](https://github.com/user-attachments/assets/f6eb2f79-9914-4d27-bfe3-9c957bc50cae)
+
 
 ## No que não abrimos mão
 
