@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { getSchoolMap } from '../api/client';
 import { INDICATORS, INDICATOR_ORDER, attentionOf, worstAttention } from '../domain/indicators';
-import { Loading } from '../components';
+import { pct0 } from '../domain/format';
+import { Bar, Brief, FilterBar, FilterControl, FilterSelect, Footnote, Loading, NoReading, Pad, SignalList, SignalRow } from '../components';
 
 /**
  * Visão de unidade. Serve a dois papéis ao mesmo tempo, e é isso que a torna
@@ -21,6 +22,14 @@ const PAIN_LABEL: Record<string, string> = {
   assessment_score: 'Desempenho abaixo da faixa dos pares',
 };
 
+/**
+ * A régua `.ctl select` do legado seleciona pelo ELEMENTO `select`. O gatilho
+ * do coss é um `<button>`, então aquela regra deixa de alcançá-lo e a variante
+ * padrão (raio, borda de 1px nos quatro lados, altura mínima de 36px, sombra)
+ * apareceria no lugar. Estas declarações são a cópia literal de `.ctl select` e
+ * vão inline porque estilo inline é a única coisa que vence a utilitária sem
+ * depender da ordem em que o Tailwind emite cada propriedade.
+ */
 export default function Unidade() {
   const map = useQuery({ queryKey: ['map'], queryFn: getSchoolMap });
   const [pick, setPick] = useState<string | null>(null);
@@ -47,79 +56,80 @@ export default function Unidade() {
     (x) => x.a === 'critical' || x.a === 'attention' || x.a === 'unreadable',
   );
 
+  // O padrão items-first do coss: as opções existem antes da hidratação, então
+  // o `SelectValue` já sabe qual rótulo mostrar no primeiro render.
+  const units = list.slice(0, 60).map((f) => ({
+    label: `${f.properties.identity.nome} · ${f.properties.identity.cre}ª CRE`,
+    value: f.properties.identity.school_id,
+  }));
+
   return (
     <div>
-      <div className="filterbar">
-        <span className="ctl">
-          <span>Unidade</span>
-          <select value={school.properties.identity.school_id} onChange={(e) => setPick(e.target.value)}>
-            {list.slice(0, 60).map((f) => (
-              <option key={f.properties.identity.school_id} value={f.properties.identity.school_id}>
-                {f.properties.identity.nome} · {f.properties.identity.cre}ª CRE
-              </option>
-            ))}
-          </select>
-        </span>
-        <span className="ctl">
-          <span>CRE</span>
-          {p.identity.cre}ª
-        </span>
-        <span className="right">ordenadas por gravidade · sem nota e sem posição de ranking</span>
-      </div>
+      <FilterBar right="ordenadas por gravidade · sem nota e sem posição de ranking">
+        <FilterControl label="Unidade">
+          <FilterSelect
+            ariaLabel="Unidade"
+            items={units}
+            onValueChange={setPick}
+            value={school.properties.identity.school_id}
+          />
+        </FilterControl>
+        <FilterControl label="CRE">{p.identity.cre}ª</FilterControl>
+      </FilterBar>
 
-      <div className="pad">
-        <div className="when">visão de unidade · serve ao diretor e à Secretaria</div>
-        <div className="brief">
-          <h2>
-            {pains.length === 0
+      <Pad>
+        <Brief
+          eyebrow="visão de unidade · serve ao diretor e à Secretaria"
+          headline={
+            pains.length === 0
               ? 'Nenhum indicador desta unidade pede atenção agora.'
-              : `${pains.length} ${pains.length === 1 ? 'frente pede' : 'frentes pedem'} atenção nesta unidade.`}
-          </h2>
-        </div>
+              : `${pains.length} ${pains.length === 1 ? 'frente pede' : 'frentes pedem'} atenção nesta unidade.`
+          }
+          size="hero"
+        />
 
-        <div className="sits">
+        <SignalList>
           {pains.map((x, i) => {
             const blocked = x.a === 'unreadable';
+            const coverage = x.m?.coverage != null ? pct0(x.m.coverage) : '—';
+            // O motivo do bloqueio é uma frase só: ela abre a `.meta` e, como
+            // esta linha não é botão, também pode virar o tooltip da hachura
+            // sem enfiar um ponto de foco dentro de um controle.
+            const blockedReason = `cobertura ${coverage} · abaixo do limiar de 50%; nenhum número é exibido`;
             return (
-              <div key={x.id} className={`sit${blocked ? ' blocked' : ''}`}>
-                <div className={`n${blocked ? ' void' : ''}`}>{blocked ? '—' : String(i + 1).padStart(2, '0')}</div>
-                <div>
-                  <h4>{blocked ? `${INDICATORS[x.id].label} sem leitura nesta unidade` : PAIN_LABEL[x.id]}</h4>
-                  <div className="meta">
-                    {blocked
-                      ? `cobertura ${x.m?.coverage != null ? `${(x.m.coverage * 100).toFixed(0)}%` : '—'} · abaixo do limiar de 50%; nenhum número é exibido`
-                      : `${INDICATORS[x.id].label}: ${INDICATORS[x.id].format(x.m!.value!)} · fórmula ${x.m!.formula_version} · cobertura ${x.m?.coverage != null ? `${(x.m.coverage * 100).toFixed(0)}%` : '—'}`}
-                  </div>
-                  <span className="agentchip">
-                    <i />
-                    {blocked ? 'Guardião de Dados bloqueou a leitura' : 'Sentinela da Rede sinalizou'}
-                  </span>
-                </div>
-                <div className="side">
-                  {blocked ? <span className="hatchbar" /> : <span className={`gauge ${x.a}`}><i style={{ width: x.a === 'critical' ? '88%' : '58%' }} /></span>}
-                  <div className="glab">
-                    <span>{blocked ? 'Sem leitura' : x.a === 'critical' ? 'Crítico' : 'Atenção'}</span>
-                    <b>{p.enrolment ?? '—'} matrículas</b>
-                  </div>
-                </div>
-              </div>
+              <SignalRow
+                agent={blocked ? 'Guardião de Dados bloqueou a leitura' : 'Sentinela da Rede sinalizou'}
+                blocked={blocked}
+                footer={`${p.enrolment ?? '—'} matrículas`}
+                index={blocked ? '—' : String(i + 1).padStart(2, '0')}
+                key={x.id}
+                levelLabel={blocked ? 'Sem leitura' : x.a === 'critical' ? 'Crítico' : 'Atenção'}
+                meta={
+                  blocked
+                    ? blockedReason
+                    : `${INDICATORS[x.id].label}: ${INDICATORS[x.id].format(x.m!.value!)} · fórmula ${x.m!.formula_version} · cobertura ${coverage}`
+                }
+                side={
+                  blocked ? (
+                    <NoReading reason={blockedReason} shape="bar" />
+                  ) : (
+                    <Bar className="gauge" level={x.a} value={x.a === 'critical' ? 0.88 : 0.58} />
+                  )
+                }
+                title={blocked ? `${INDICATORS[x.id].label} sem leitura nesta unidade` : PAIN_LABEL[x.id]}
+              />
             );
           })}
           {pains.length === 0 && (
-            <div className="sit">
-              <div className="n">—</div>
-              <div>
-                <h4>Todos os indicadores desta unidade estão dentro da faixa da rede.</h4>
-                <div className="meta">
-                  Isso não significa que a escola vá bem em tudo — significa que nada, entre os quatro
-                  indicadores carregados, cruzou um limiar publicado.
-                </div>
-              </div>
-            </div>
+            <SignalRow
+              index="—"
+              meta="Isso não significa que a escola vá bem em tudo — significa que nada, entre os quatro indicadores carregados, cruzou um limiar publicado."
+              title="Todos os indicadores desta unidade estão dentro da faixa da rede."
+            />
           )}
-        </div>
+        </SignalList>
 
-        <div className="footnote">
+        <Footnote>
           <span>{p.identity.school_id}</span>
           <span>{p.identity.bairro}</span>
           <span>
@@ -127,8 +137,8 @@ export default function Unidade() {
               abrir a série completa e os pares comparáveis
             </Link>
           </span>
-        </div>
-      </div>
+        </Footnote>
+      </Pad>
     </div>
   );
 }

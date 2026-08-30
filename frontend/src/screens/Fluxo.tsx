@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, useSearchParams } from 'react-router-dom';
-import { getByGrade, getFlow, getStaffingGap } from '../api/pipeline';
-import { Loading } from '../components';
+import { useSearchParams } from 'react-router-dom';
+import { getByGrade, getFlow, getStaffingGap, type FlowRow } from '../api/pipeline';
+import { int, pct } from '../domain/format';
+import { Brief, DataTable, DerivedNote, FilterBar, FilterControl, FilterSelect, Legend, Loading, Mono, Note, Num, Pad, RowIdentity, Stat, StatLine, type DataColumn } from '../components';
 
 /**
  * Fluxo — onde a rede perde aluno, aula e aprendizagem.
@@ -14,8 +15,15 @@ import { Loading } from '../components';
  * As três usam dados do pipeline da SME, hoje sintéticos nas formas reais.
  */
 
-const pct = (v: number) => `${(v * 100).toFixed(1).replace('.', ',')}%`;
-const int = (v: number) => v.toLocaleString('pt-BR');
+/**
+ * O `<select>` da régua de recorte, agora `Select` do coss.
+ *
+ * `.ctl select` casa com o ELEMENTO `select`, e o gatilho do coss é um
+ * `<button>` — a classe legada não alcança. A geometria dela é reescrita aqui
+ * em utilitária: peso 500, tinta `--ink`, sem fundo, sem borda exceto a régua
+ * de 1px embaixo, respiro de 1px. O resto neutraliza o cartão que o gatilho
+ * traz de fábrica (raio, anel, sombra, altura e largura mínimas).
+ */
 
 export default function Fluxo() {
   const [params, setParams] = useSearchParams();
@@ -31,6 +39,13 @@ export default function Fluxo() {
   const worst = f.rows.slice(0, 8);
   const cres = [...new Set(f.rows.map((r) => r.cre))].sort((a, b) => a - b);
 
+  // Os itens do recorte chegam prontos ao `Select`: com `items` declarado, o
+  // gatilho mostra o rótulo do valor escolhido sem mapa paralelo na tela.
+  const creItems = [
+    { label: 'rede municipal', value: '' },
+    ...cres.map((c) => ({ label: `${c}ª CRE`, value: String(c) })),
+  ];
+
   // a transição: o 6º ano é o índice 5
   const g = grade.data.rows;
   const iniciais = g.slice(0, 5);
@@ -39,127 +54,134 @@ export default function Fluxo() {
     arr.reduce((a, r) => a + pick(r), 0) / arr.length;
   const quedaNota = mean(iniciais, (r) => r.subject_grade_mean) - mean(finais, (r) => r.subject_grade_mean);
 
+  const flowColumns: DataColumn<FlowRow>[] = [
+    {
+      header: 'Unidade com maior saída líquida',
+      cell: (r) => <RowIdentity as="link" sub={`${r.cre}ª CRE`} title={r.scope_label} to={`/escola/${r.scope_id}`} />,
+    },
+    { header: 'Matrícula', cell: (r) => <Num tone="mut">{int(r.matricula_base)}</Num> },
+    { header: 'Entradas', cell: (r) => <Num tone="mut">+{int(r.entradas)}</Num> },
+    { header: 'Saída interna', cell: (r) => <Num tone="mut">−{int(r.saidas_internas)}</Num> },
+    { header: 'Saída externa', cell: (r) => <Num tone="bad">−{int(r.saidas_externas)}</Num> },
+    { header: 'Saldo', cell: (r) => <Num tone="worse">{r.saldo}</Num> },
+    {
+      header: 'Trajetória interrompida',
+      // O `td` do kit nasce em `--ink-2`; este número não tem tom e precisa
+      // continuar na tinta cheia, como no legado.
+      className: 'text-ink',
+      cell: (r) => <Num>{int(r.trajetorias_interrompidas)}</Num>,
+    },
+  ];
+
   return (
     <div>
-      <div className="filterbar">
-        <span className="ctl">
-          <span>Recorte</span>
-          <select
-            value={cre ?? ''}
-            onChange={(e) => setParams(e.target.value ? { cre: e.target.value } : {})}
-          >
-            <option value="">rede municipal</option>
-            {cres.map((c) => (
-              <option key={c} value={c}>
-                {c}ª CRE
-              </option>
-            ))}
-          </select>
-        </span>
-        <span className="right">
-          {int(f.rows.length)} unidades de ensino fundamental · creches, EDIs e demais equipamentos ficam fora
-        </span>
-      </div>
+      <FilterBar
+        right={`${int(f.rows.length)} unidades de ensino fundamental · creches, EDIs e demais equipamentos ficam fora`}
+      >
+        <FilterControl label="Recorte">
+          <FilterSelect
+            ariaLabel="Recorte"
+            items={creItems}
+            onValueChange={(v) => setParams(v ? { cre: v } : {})}
+            value={cre ? String(cre) : ''}
+          />
+        </FilterControl>
+      </FilterBar>
 
-      <div className="derived">
+      <DerivedNote variant="bar">
         <b>Sintético nos schemas do pipeline da SME.</b> Fluxo vem de{' '}
-        <span className="mono">movimentacao</span>, carência de{' '}
-        <span className="mono">disciplinas_sem_professor</span>, aula perdida de{' '}
-        <span className="mono">id_situacao</span> em{' '}
-        <span className="mono">frq_frequencia</span>. As formas são as reais — quando o dado do
+        <Mono>movimentacao</Mono>, carência de{' '}
+        <Mono>disciplinas_sem_professor</Mono>, aula perdida de{' '}
+        <Mono>id_situacao</Mono> em{' '}
+        <Mono>frq_frequencia</Mono>. As formas são as reais — quando o dado do
         briefing entrar, muda a origem, não a tela.
-      </div>
+      </DerivedNote>
 
-      <div className="pad">
+      <Pad>
         {/* ---------- 1. fluxo de matrícula ---------- */}
         <section className="fluxosec">
-          <div className="when">01 · para onde o aluno vai</div>
-          <h2 className="fluxoh">
-            {f.totals.saldo < 0 ? 'Saldo negativo de' : 'Saldo de'} {int(Math.abs(f.totals.saldo))}{' '}
-            matrículas {f.scope_label === 'rede municipal' ? 'na rede' : `na ${f.scope_label}`}.
-          </h2>
-          <p className="fluxop">
-            Abandono é medida de estoque. Movimentação é fluxo — e separa transferência dentro da rede,
-            que é problema de atratividade ou território, de saída para fora, que é outro problema.
-          </p>
+          <Brief
+            eyebrow="01 · para onde o aluno vai"
+            headline={
+              <>
+                {f.totals.saldo < 0 ? 'Saldo negativo de' : 'Saldo de'} {int(Math.abs(f.totals.saldo))}{' '}
+                matrículas {f.scope_label === 'rede municipal' ? 'na rede' : `na ${f.scope_label}`}.
+              </>
+            }
+            lede={
+              <>
+                Abandono é medida de estoque. Movimentação é fluxo — e separa transferência dentro da rede,
+                que é problema de atratividade ou território, de saída para fora, que é outro problema.
+              </>
+            }
+            size="section"
+          />
 
-          <div className="statline">
-            <div className="st">
-              <div className="k">Entradas</div>
-              <div className="v">{int(f.totals.entradas)}</div>
-            </div>
-            <div className="st">
-              <div className="k">Saída interna</div>
-              <div className="v">
-                {int(f.totals.saidas_internas)} <em>outra unidade da rede</em>
-              </div>
-            </div>
-            <div className="st">
-              <div className="k">Saída externa</div>
-              <div className="v">
-                {int(f.totals.saidas_externas)} <em className="bad">fora da rede</em>
-              </div>
-            </div>
-            <div className="st">
-              <div className="k">Trajetória interrompida</div>
-              <div className="v">
-                {int(f.totals.trajetorias_interrompidas)} <em>3+ movimentações</em>
-              </div>
-            </div>
-          </div>
+          <StatLine variant="section">
+            <Stat label="Entradas" value={int(f.totals.entradas)} />
+            <Stat
+              label="Saída interna"
+              value={
+                <>
+                  {int(f.totals.saidas_internas)} <em>outra unidade da rede</em>
+                </>
+              }
+            />
+            <Stat
+              label="Saída externa"
+              value={
+                <>
+                  {int(f.totals.saidas_externas)} <em className="bad">fora da rede</em>
+                </>
+              }
+            />
+            <Stat
+              label="Trajetória interrompida"
+              value={
+                <>
+                  {int(f.totals.trajetorias_interrompidas)} <em>3+ movimentações</em>
+                </>
+              }
+            />
+          </StatLine>
 
           <div className="tblwrap" style={{ marginTop: 20 }}>
-            <table className="m">
-              <thead>
-                <tr>
-                  <th>Unidade com maior saída líquida</th>
-                  <th>Matrícula</th>
-                  <th>Entradas</th>
-                  <th>Saída interna</th>
-                  <th>Saída externa</th>
-                  <th>Saldo</th>
-                  <th>Trajetória interrompida</th>
-                </tr>
-              </thead>
-              <tbody>
-                {worst.map((r) => (
-                  <tr key={r.scope_id}>
-                    <td>
-                      <Link className="creid" to={`/escola/${r.scope_id}`}>
-                        <b>{r.scope_label}</b>
-                        <span>{r.cre}ª CRE</span>
-                      </Link>
-                    </td>
-                    <td><span className="num mut">{int(r.matricula_base)}</span></td>
-                    <td><span className="num mut">+{int(r.entradas)}</span></td>
-                    <td><span className="num mut">−{int(r.saidas_internas)}</span></td>
-                    <td><span className="num bad">−{int(r.saidas_externas)}</span></td>
-                    <td><span className="num worse">{r.saldo}</span></td>
-                    <td><span className="num">{int(r.trajetorias_interrompidas)}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable
+              className="m"
+              columns={flowColumns}
+              getRowKey={(r) => r.scope_id}
+              rows={worst}
+            />
           </div>
-          <p className="seclimit">
+          <Note className="seclimit">
             {f.limitations.map((l) => (
               <span key={l}>{l}</span>
             ))}
-          </p>
+          </Note>
         </section>
 
         {/* ---------- 2. carência × aula perdida ---------- */}
         <section className="fluxosec">
-          <div className="when">02 · onde a falta de professor custa aula</div>
-          <h2 className="fluxoh">
-            {gap.data.rows[0].disciplina} concentra a maior carência, com {pct(gap.data.rows[0].taxa_carencia)}{' '}
-            das horas sem professor.
-          </h2>
-          <p className="fluxop">
-            As duas séries abaixo <b>coincidem</b> no recorte. O dado disponível não estabelece direção
-            causal entre carência e cancelamento — e a tela não afirma que estabelece.
-          </p>
+          <Brief
+            eyebrow="02 · onde a falta de professor custa aula"
+            headline={
+              <>
+                {gap.data.rows[0].disciplina} concentra a maior carência, com {pct(gap.data.rows[0].taxa_carencia)}{' '}
+                das horas sem professor.
+              </>
+            }
+            lede={
+              <>
+                As duas séries abaixo <b>coincidem</b> no recorte. O dado disponível não estabelece direção
+                causal entre carência e cancelamento — e a tela não afirma que estabelece.
+              </>
+            }
+            size="section"
+          />
 
+          {/* As barras duplas seguem à mão: a largura é amplificada em 260% de
+              propósito, para que diferenças de meio ponto percentual apareçam.
+              Não é medidor linear, e um `Meter` diria que é. */}
           <div className="gaptable">
             {gap.data.rows.map((r) => (
               <div className="gaprow" key={r.disciplina}>
@@ -177,31 +199,43 @@ export default function Fluxo() {
                 <span className="gv mono bad">{pct(r.taxa_cancelamento)}</span>
               </div>
             ))}
-            <div className="gaplegend">
-              <span><i className="car" />horas sem professor</span>
-              <span><i className="can" />aulas canceladas</span>
-            </div>
+            <Legend
+              className="gaplegend"
+              items={[
+                { swatch: 'bar', swatchClassName: 'car', label: 'horas sem professor' },
+                { swatch: 'bar', swatchClassName: 'can', label: 'aulas canceladas' },
+              ]}
+            />
           </div>
-          <p className="seclimit">
+          <Note className="seclimit">
             {gap.data.limitations.map((l) => (
               <span key={l}>{l}</span>
             ))}
-          </p>
+          </Note>
         </section>
 
         {/* ---------- 3. corte por ano ---------- */}
         <section className="fluxosec">
-          <div className="when">03 · onde a curva quebra</div>
-          <h2 className="fluxoh">
-            A nota média cai {quedaNota.toFixed(1).replace('.', ',')} ponto entre os anos iniciais e os
-            finais, e a maior queda está na entrada do 6º ano.
-          </h2>
-          <p className="fluxop">
-            É a dor que a própria Secretaria expõe: IDEB dos anos iniciais subindo, anos finais parado.
-            A transição do 5º para o 6º é onde a mudança de regime acontece — mais professores, mais
-            disciplinas, outra rotina.
-          </p>
+          <Brief
+            eyebrow="03 · onde a curva quebra"
+            headline={
+              <>
+                A nota média cai {quedaNota.toFixed(1).replace('.', ',')} ponto entre os anos iniciais e os
+                finais, e a maior queda está na entrada do 6º ano.
+              </>
+            }
+            lede={
+              <>
+                É a dor que a própria Secretaria expõe: IDEB dos anos iniciais subindo, anos finais parado.
+                A transição do 5º para o 6º é onde a mudança de regime acontece — mais professores, mais
+                disciplinas, outra rotina.
+              </>
+            }
+            size="section"
+          />
 
+          {/* A coluna de frequência tem domínio próprio (85–98%), publicado na
+              legenda logo abaixo. Continua à mão porque a escala é a leitura. */}
           <div className="gradegrid">
             {g.map((r, i) => {
               const isTransition = i === 5;
@@ -217,19 +251,22 @@ export default function Fluxo() {
               );
             })}
           </div>
-          <div className="gradekey">
-            <span>barra: frequência (escala 85–98%)</span>
-            <span>número: nota média do COC, 0–10</span>
-            <span>abaixo: saída externa</span>
-            <span className="tr">coluna destacada: entrada dos anos finais</span>
-          </div>
-          <p className="seclimit">
+          <Legend
+            className="gradekey"
+            items={[
+              { swatch: 'none', label: 'barra: frequência (escala 85–98%)' },
+              { swatch: 'none', label: 'número: nota média do COC, 0–10' },
+              { swatch: 'none', label: 'abaixo: saída externa' },
+              { swatch: 'none', className: 'tr', label: 'coluna destacada: entrada dos anos finais' },
+            ]}
+          />
+          <Note className="seclimit">
             {grade.data.limitations.map((l) => (
               <span key={l}>{l}</span>
             ))}
-          </p>
+          </Note>
         </section>
-      </div>
+      </Pad>
     </div>
   );
 }

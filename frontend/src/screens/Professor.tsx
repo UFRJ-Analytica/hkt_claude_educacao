@@ -1,3 +1,5 @@
+import { Card, ListRow } from '../components';
+
 /**
  * Papel professor — PREVIEW DE CONCEITO, deliberadamente não funcional.
  *
@@ -6,6 +8,34 @@
  * nenhum material é indexado e nenhum dado de aluno é lido: as fontes abaixo
  * aparecem com o estado real delas, que hoje é "não conectada".
  */
+
+/** As quatro fontes que o RAG usaria. Ordinal é conteúdo: é a ordem de consulta. */
+const SOURCES = [
+  'Material didático adotado pela rede',
+  'Matriz curricular e BNCC da etapa',
+  'Desempenho agregado da turma',
+  'Devolutiva da Prova Rio',
+];
+
+/**
+ * Os limites. `✕` é recusa, `✓` é garantia — o glifo carrega a distinção
+ * junto com a posição na lista, porque a leitura aqui é de contrato.
+ */
+const LIMITS: { mark: string; text: string }[] = [
+  { mark: '✕', text: 'Nenhum score individual de aluno é exibido ou enviado ao modelo' },
+  { mark: '✕', text: 'Nenhuma avaliação de desempenho do professor, direta ou derivada' },
+  { mark: '✕', text: 'Grupos pequenos são suprimidos — turma com poucos alunos não é segmentada' },
+  { mark: '✕', text: 'Nada de diagnóstico clínico, social ou familiar' },
+  { mark: '✓', text: 'Toda sugestão cita o trecho do material que a sustenta' },
+  { mark: '✓', text: 'O plano é rascunho: o professor edita, aprova ou descarta' },
+];
+
+/**
+ * `.srcrow` é grade de três colunas (`.ico`, `.gr`, `.mt`), então o layout é
+ * `cells`: em `stacked` o rótulo ganharia um invólucro e sairia da coluna que
+ * `flex: 1` governa.
+ */
+const SRCROW_SLOTS = { leading: 'ico', label: 'gr', meta: 'mt' } as const;
 
 export default function Professor() {
   return (
@@ -22,77 +52,52 @@ export default function Professor() {
       </div>
 
       <div className="twocol">
-        <section className="panel">
-          <h4>Plano de aula com recuperação sobre material autorizado</h4>
-          <p className="sub">
-            RAG restrito ao material que a rede já aprovou. O modelo não inventa currículo: ele recupera,
-            cita a origem e propõe — o professor edita e decide.
-          </p>
+        <Card
+          variant="panel"
+          title="Plano de aula com recuperação sobre material autorizado"
+          subtitle="RAG restrito ao material que a rede já aprovou. O modelo não inventa currículo: ele recupera, cita a origem e propõe — o professor edita e decide."
+        >
+          {SOURCES.map((source, i) => (
+            <ListRow
+              className="srcrow"
+              key={source}
+              label={source}
+              layout="cells"
+              leading={i + 1}
+              meta="não conectado"
+              slots={SRCROW_SLOTS}
+            />
+          ))}
 
-          <div className="srcrow">
-            <span className="ico">1</span>
-            <span className="gr">Material didático adotado pela rede</span>
-            <span className="mt">não conectado</span>
-          </div>
-          <div className="srcrow">
-            <span className="ico">2</span>
-            <span className="gr">Matriz curricular e BNCC da etapa</span>
-            <span className="mt">não conectado</span>
-          </div>
-          <div className="srcrow">
-            <span className="ico">3</span>
-            <span className="gr">Desempenho agregado da turma</span>
-            <span className="mt">não conectado</span>
-          </div>
-          <div className="srcrow">
-            <span className="ico">4</span>
-            <span className="gr">Devolutiva da Prova Rio</span>
-            <span className="mt">não conectado</span>
-          </div>
-
-          <p className="sub" style={{ marginTop: 16, marginBottom: 0 }}>
+          {/* `mb-0!` porque `.panel .sub { margin-bottom: 14px }` está fora de
+              camada e venceria qualquer utilitária sem `!`. */}
+          <p className="sub mt-4 mb-0!">
             Saída esperada: objetivo da aula, sequência, atividade diferenciada por faixa de desempenho e
             os trechos do material que sustentam cada escolha — todos citáveis.
           </p>
-        </section>
+        </Card>
 
-        <section className="panel">
-          <h4>Os limites, que são a parte difícil</h4>
-          <p className="sub">
-            Este é o papel com maior risco de a ferramenta virar avaliação de pessoa. As regras abaixo não
-            são preferência de design; saem direto das regras de negócio e da política de privacidade.
-          </p>
+        <Card
+          variant="panel"
+          title="Os limites, que são a parte difícil"
+          subtitle="Este é o papel com maior risco de a ferramenta virar avaliação de pessoa. As regras abaixo não são preferência de design; saem direto das regras de negócio e da política de privacidade."
+        >
+          {LIMITS.map((limit) => (
+            <ListRow
+              className="srcrow"
+              key={limit.text}
+              label={limit.text}
+              layout="cells"
+              leading={limit.mark}
+              slots={SRCROW_SLOTS}
+            />
+          ))}
 
-          <div className="srcrow">
-            <span className="ico">✕</span>
-            <span className="gr">Nenhum score individual de aluno é exibido ou enviado ao modelo</span>
-          </div>
-          <div className="srcrow">
-            <span className="ico">✕</span>
-            <span className="gr">Nenhuma avaliação de desempenho do professor, direta ou derivada</span>
-          </div>
-          <div className="srcrow">
-            <span className="ico">✕</span>
-            <span className="gr">Grupos pequenos são suprimidos — turma com poucos alunos não é segmentada</span>
-          </div>
-          <div className="srcrow">
-            <span className="ico">✕</span>
-            <span className="gr">Nada de diagnóstico clínico, social ou familiar</span>
-          </div>
-          <div className="srcrow">
-            <span className="ico">✓</span>
-            <span className="gr">Toda sugestão cita o trecho do material que a sustenta</span>
-          </div>
-          <div className="srcrow">
-            <span className="ico">✓</span>
-            <span className="gr">O plano é rascunho: o professor edita, aprova ou descarta</span>
-          </div>
-
-          <p className="sub" style={{ marginTop: 16, marginBottom: 0 }}>
+          <p className="sub mt-4 mb-0!">
             <b>Família</b> fica fora do escopo até o evento: exigiria base legal, canal de comunicação e
             consentimento que não temos, e comunicação externa automática é proibida no MVP.
           </p>
-        </section>
+        </Card>
       </div>
     </div>
   );

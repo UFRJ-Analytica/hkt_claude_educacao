@@ -4,29 +4,37 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { getSchoolMap, mapOrigin } from '../api/client';
 import { getNetworkSnapshot } from '../api/analytics';
 import type { IndicatorId, SchoolMapFeature } from '../api/types';
-import { INDICATORS, INDICATOR_ORDER, attentionOf, type Attention } from '../domain/indicators';
+import { INDICATORS, INDICATOR_ORDER, attentionOf, levelFor, type Attention } from '../domain/indicators';
+import { DELTA_NOISE_FLOOR, pct0 } from '../domain/format';
 import { deriveSnapshot, rowsFromSnapshots, type CreCell } from '../domain/network';
-import { CoverageTicks, Loading, MetricCell, Sparkline } from '../components';
+import { Bar, CoverageTicks, Delta, DerivedNote, FilterBar, FilterControl, FilterSelect, Loading, MetricCell, Mono, NoReading, Num, RowIdentity, Sparkline, toneForAttention } from '../components';
 
 type SortKey = IndicatorId | 'cre' | 'units';
 
-/** Nível visual de uma célula agregada, usando os mesmos limiares publicados. */
+/**
+ * O `<select>` da régua de recorte, agora `Select` do coss.
+ *
+ * `.ctl select` casa com o ELEMENTO `select`, e o gatilho do coss é um
+ * `<button>` — a classe legada não alcança. Então a geometria dele é
+ * reescrita aqui em utilitária, declaração por declaração, a partir da mesma
+ * regra: peso 500, tinta `--ink`, sem fundo, sem borda exceto a régua de
+ * 1px embaixo, respiro de 1px em cima e embaixo. O resto é neutralização do
+ * cartão que o gatilho traz de fábrica (raio, anel, sombra, altura mínima de
+ * 36px, largura mínima de 9rem).
+ */
+
+/**
+ * Nível visual de uma célula agregada, usando os mesmos limiares publicados.
+ *
+ * A escada de limiares saiu daqui: é `levelFor` em `domain/indicators`, o
+ * mesmo código que pinta ponto no mapa e barra na tabela. O que sobra é o
+ * único julgamento que só existe no agregado — mais de metade das unidades
+ * legíveis em modo degradado degrada a média inteira.
+ */
 function cellLevel(cell: CreCell, id: IndicatorId): Attention {
   if (cell.value === null) return 'unreadable';
   if (cell.degraded > cell.readable / 2) return 'degraded';
-  const spec = INDICATORS[id];
-  const [t1, t2, t3] = spec.thresholds;
-  const v = cell.value;
-  if (spec.worse === 'low') {
-    if (v < t3) return 'critical';
-    if (v < t2) return 'attention';
-    if (v < t1) return 'low';
-    return 'none';
-  }
-  if (v > t3) return 'critical';
-  if (v > t2) return 'attention';
-  if (v > t1) return 'low';
-  return 'none';
+  return levelFor(INDICATORS[id], cell.value);
 }
 
 export default function Comparar() {
@@ -83,6 +91,14 @@ export default function Comparar() {
 
   const sortLabel = sort === 'cre' ? 'CRE' : sort === 'units' ? 'unidades' : INDICATORS[sort].label;
 
+  // Os itens do recorte chegam prontos ao `Select`: com `items` declarado, o
+  // valor selecionado sai como rótulo no gatilho sem a tela guardar um mapa
+  // paralelo de código para nome.
+  const creItems = [
+    { label: `todas as CREs (${snap.rows.length})`, value: '' },
+    ...snap.rows.map((r) => ({ label: `${r.cre}ª CRE`, value: String(r.cre) })),
+  ];
+
   // Domínio único para a coluna de série: pequenos múltiplos só comparam sob a
   // mesma escala. Auto-escalar cada linha transformaria ruído em sinal.
   const allSeries = rows.flatMap((r) => r.cells.attendance_rate.series ?? []);
@@ -92,52 +108,42 @@ export default function Comparar() {
 
   return (
     <div>
-      <div className="filterbar">
-        <span className="ctl">
-          <span>Recorte</span>
-          <select
-            value={creFilter ?? ''}
-            onChange={(e) => {
-              const v = e.target.value;
-              setParams(v ? { cre: v } : {});
-            }}
-          >
-            <option value="">todas as CREs ({snap.rows.length})</option>
-            {snap.rows.map((r) => (
-              <option key={r.cre} value={r.cre}>
-                {r.cre}ª CRE
-              </option>
-            ))}
-          </select>
-        </span>
-        <span className="ctl">
-          <span>Período</span>
-          jul 2026
-        </span>
-        <span className="ctl">
-          <span>Ordenar</span>
+      <FilterBar
+        right={`${snap.units.toLocaleString('pt-BR')} unidades no recorte · totais calculados no conjunto completo`}
+      >
+        <FilterControl label="Recorte">
+          <FilterSelect
+            ariaLabel="Recorte"
+            items={creItems}
+            onValueChange={(v) => setParams(v ? { cre: v } : {})}
+            value={creFilter ? String(creFilter) : ''}
+          />
+        </FilterControl>
+        <FilterControl label="Período">jul 2026</FilterControl>
+        <FilterControl label="Ordenar">
           {sortLabel} {sort === 'cre' || sort === 'units' ? '' : INDICATORS[sort as IndicatorId].worse === 'low' ? '↑' : '↓'}
-        </span>
-        <span className="right">
-          {snap.units.toLocaleString('pt-BR')} unidades no recorte · totais calculados no conjunto completo
-        </span>
-      </div>
+        </FilterControl>
+      </FilterBar>
 
       {governedRows ? (
-        <div className="derived governed">
+        <DerivedNote variant="governed">
           <b>Agregação governada pelo backend.</b> Os valores vêm de{' '}
-          <span className="mono">GET /api/v1/network/snapshot?cre=</span>, com numerador, denominador e cobertura
+          <Mono>GET /api/v1/network/snapshot?cre=</Mono>, com numerador, denominador e cobertura
           declarados por observação. Série de 12 meses não faz parte do contrato — por isso a coluna aparece
           hachurada em vez de desenhar uma linha que o backend não devolveu.
-        </div>
+        </DerivedNote>
       ) : (
-        <div className="derived">
-          <b>Agregação derivada no cliente.</b> O endpoint <span className="mono">GET /api/v1/network/snapshot</span>{' '}
+        <DerivedNote variant="bar">
+          <b>Agregação derivada no cliente.</b> O endpoint <Mono>GET /api/v1/network/snapshot</Mono>{' '}
           existe, mas o dataset governado ainda não sustenta a leitura de rede — então a média por CRE é calculada
           aqui sobre os valores interpretáveis, e unidades bloqueadas ficam fora do numerador e do denominador.
-        </div>
+        </DerivedNote>
       )}
 
+      {/* A tabela segue crua: `DataTable` monta uma linha por item do array e
+          esta tem três espécies de linha — a CRE, as escolas que ela abre e o
+          rodapé de transbordo com `colSpan` — além do realce `focus` na
+          primeira. Nenhuma delas cabe no modelo de coluna do kit hoje. */}
       <div className="tblwrap">
         <table className="m">
           <thead>
@@ -186,73 +192,81 @@ export default function Comparar() {
                     }
                   >
                     <td>
-                      <button type="button" className="creid" onClick={() => setOpen(expanded ? null : r.cre)}>
-                        <b>{r.cre}ª CRE</b>
-                        <span>
-                          {expanded ? '▾' : '▸'} {r.units} un
-                        </span>
-                      </button>
+                      <RowIdentity
+                        expanded={expanded}
+                        onClick={() => setOpen(expanded ? null : r.cre)}
+                        sub={`${r.units} un`}
+                        title={`${r.cre}ª CRE`}
+                      />
                     </td>
                     {INDICATOR_ORDER.map((id) => {
                       const c = r.cells[id];
                       if (c.value === null) {
                         return (
                           <td key={id}>
-                            <span className="blockcell" title={`${c.blocked} unidades sem leitura`} />
+                            <NoReading reason={`${c.blocked} unidades sem leitura`} shape="cell" />
                           </td>
                         );
                       }
                       const spec = INDICATORS[id];
                       const lvl = cellLevel(c, id);
                       const [min, max] = spec.scale;
-                      const w = Math.max(0, Math.min(1, (c.value - min) / (max - min))) * 100;
+                      const w = Math.max(0, Math.min(1, (c.value - min) / (max - min)));
                       return (
                         <td key={id}>
                           <span className="cell">
-                            <span className={`num${lvl === 'critical' ? ' worse' : lvl === 'attention' ? ' bad' : lvl === 'none' ? ' mut' : ''}`}>
-                              {spec.format(c.value)}
-                            </span>
-                            <span className="bar">
-                              <i className={lvl} style={{ width: `${w}%` }} />
-                            </span>
+                            <Num tone={toneForAttention(lvl)}>{spec.format(c.value)}</Num>
+                            {/* `indicatorClassName` devolve o raio de 2px que
+                                `.bar i` desenhava: o preenchimento do `Meter` é
+                                um `div`, e aquele seletor de elemento não o
+                                alcança mais. */}
+                            <Bar
+                              className="bar"
+                              indicatorClassName="rounded-[2px]"
+                              label={`${spec.label}: ${spec.format(c.value)}`}
+                              level={lvl}
+                              value={w}
+                            />
                           </span>
                         </td>
                       );
                     })}
                     <td>
-                      {att.delta === null ? (
-                        <span className="delta">—</span>
-                      ) : Math.abs(att.delta) < 0.003 ? (
-                        <span className="delta" title="variação dentro do ruído do período">
-                          estável
-                        </span>
-                      ) : (
-                        <span className={`delta${att.delta < -0.01 ? ' worse' : att.delta < 0 ? ' bad' : ''}`}>
-                          {att.delta < 0 ? '▼' : '▲'} {Math.abs(att.delta * 100).toFixed(1).replace('.', ',')} pp
-                        </span>
-                      )}
+                      <Delta
+                        delta={att.delta}
+                        title={
+                          att.delta !== null && Math.abs(att.delta) < DELTA_NOISE_FLOOR
+                            ? 'variação dentro do ruído do período'
+                            : undefined
+                        }
+                      />
                     </td>
                     <td>
                       <Sparkline series={att.series} level={cellLevel(att, 'attendance_rate')} domain={sparkDomain} />
                     </td>
                     <td>
                       <CoverageTicks ratio={r.coverage} />{' '}
-                      <span className={`num ${r.coverage < 0.8 ? 'bad' : 'mut'}`} style={{ fontSize: 11 }}>
-                        {(r.coverage * 100).toFixed(0)}%
-                      </span>
+                      {/* O corpo de 11px é menor que o de `.num`, e `.num` está
+                          fora de camada: sem `!` a utilitária perde. */}
+                      <Num className="text-[11px]!" tone={r.coverage < 0.8 ? 'bad' : 'mut'}>
+                        {pct0(r.coverage)}
+                      </Num>
                     </td>
                   </tr>
 
                   {kids.map((f) => {
                     const m = f.properties.metrics;
                     const s = m.attendance_rate;
+                    const ser = s?.series;
                     return (
                       <tr key={f.properties.identity.school_id} className="child">
                         <td>
-                          <Link className="creid" to={`/escola/${f.properties.identity.school_id}`}>
-                            <b>{f.properties.identity.nome}</b>
-                            <span>{f.properties.enrolment ?? '—'} matr.</span>
-                          </Link>
+                          <RowIdentity
+                            as="link"
+                            sub={`${f.properties.enrolment ?? '—'} matr.`}
+                            title={f.properties.identity.nome}
+                            to={`/escola/${f.properties.identity.school_id}`}
+                          />
                         </td>
                         {INDICATOR_ORDER.map((id) => (
                           <td key={id}>
@@ -260,17 +274,7 @@ export default function Comparar() {
                           </td>
                         ))}
                         <td>
-                          {(() => {
-                            const ser = s?.series;
-                            if (!ser || ser.length < 12) return <span className="delta">—</span>;
-                            const d = ser[11] - ser[8];
-                            if (Math.abs(d) < 0.003) return <span className="delta">estável</span>;
-                            return (
-                              <span className={`delta${d < -0.01 ? ' worse' : d < 0 ? ' bad' : ''}`}>
-                                {d < 0 ? '▼' : '▲'} {Math.abs(d * 100).toFixed(1).replace('.', ',')} pp
-                              </span>
-                            );
-                          })()}
+                          <Delta delta={ser && ser.length >= 12 ? ser[11] - ser[8] : null} />
                         </td>
                         <td>
                           <Sparkline series={s?.series} level={attentionOf(s)} domain={sparkDomain} />

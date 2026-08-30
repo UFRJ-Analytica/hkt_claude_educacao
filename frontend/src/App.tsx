@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { getCapabilities, getSchoolMap, mapOrigin } from './api/client';
 import type { Capability } from './api/types';
 import Hoje from './screens/Hoje';
@@ -13,8 +13,9 @@ import Recomposicao from './screens/Recomposicao';
 import Fluxo from './screens/Fluxo';
 import Dados from './screens/Dados';
 import Copiloto from './Copiloto';
-import { ROLES, useRole } from './roles';
+import { useRole } from './roles';
 import { CapabilityState, Loading } from './components';
+import { DemoBar, TopNav } from '@/components/shell';
 
 function isUsable(cap: Capability | undefined) {
   return cap ? ['AVAILABLE', 'MOCK_ONLY', 'DEGRADED'].includes(cap.status) : false;
@@ -26,7 +27,7 @@ const INDICATOR_CAPS = ['network', 'learning', 'attendance', 'capacity', 'staffi
 export default function App() {
   const caps = useQuery({ queryKey: ['capabilities'], queryFn: getCapabilities });
   const map = useQuery({ queryKey: ['map'], queryFn: getSchoolMap });
-  const { role, setRole } = useRole();
+  const { role } = useRole();
   const [copilot, setCopilot] = useState(false);
 
   useEffect(() => {
@@ -54,63 +55,16 @@ export default function App() {
 
   return (
     <div className="shell">
-      <nav className="nav">
-        <span className="wordmark">
-          <i />
-          Pulso
-        </span>
+      <TopNav
+        geoReal={origin.geoReal}
+        links={visible}
+        live={live}
+        note={origin.note}
+        onOpenCopilot={() => setCopilot(true)}
+        snapshot={map.data ? map.data.snapshot_id.slice(0, 8) : null}
+      />
 
-        <div className="roleswitch" role="group" aria-label="Papel">
-          {ROLES.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              className={role.id === r.id ? 'on' : ''}
-              disabled={r.state === 'fora-de-escopo'}
-              title={r.state === 'fora-de-escopo' ? r.note : `${r.scope} — ${r.note}`}
-              onClick={() => setRole(r.id)}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="navlinks">
-          {visible.map((r) => (
-            <NavLink key={r.path} to={r.path} className={({ isActive }) => (isActive ? 'cur' : '')}>
-              {r.label}
-            </NavLink>
-          ))}
-        </div>
-
-        <div className="navr">
-          <span className={`seal${live ? ' live' : ''}`} title={origin.note}>
-            <i />
-            {origin.geoReal ? 'REDE REAL · IND. SINTÉTICOS' : live ? 'SINTÉTICO · API' : 'SINTÉTICO · FIXTURE'}
-            <span className="hidden-sm">{` · ${map.data ? map.data.snapshot_id.slice(0, 8) : '········'}`}</span>
-          </span>
-          <button type="button" className="askbtn" onClick={() => setCopilot(true)}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
-              <path d="M12 3l2.2 5.6L20 11l-5.8 2.4L12 19l-2.2-5.6L4 11l5.8-2.4z" />
-            </svg>
-            Copiloto
-            <kbd>⌘K</kbd>
-          </button>
-        </div>
-      </nav>
-
-      {!anyIndicator && map.data && (
-        <div className="demobar">
-          <b>Indicadores em modo demonstração.</b> A API declara{' '}
-          <span className="mono">network</span>, <span className="mono">learning</span>,{' '}
-          <span className="mono">attendance</span>, <span className="mono">capacity</span> e{' '}
-          <span className="mono">staffing</span> como <span className="mono">SCHEMA_ONLY</span> — não há
-          indicador real carregado.
-          {registryReal
-            ? ' Identidade, CRE, tipo e coordenada das escolas são reais (Data.Rio/SME, CC-BY 4.0); os números exibidos são sintéticos.'
-            : ' Tudo nesta tela é sintético.'}
-        </div>
-      )}
+      {!anyIndicator && map.data && <DemoBar registryReal={registryReal} />}
 
       <main className="page">
         {caps.isLoading || map.isLoading ? (

@@ -1,0 +1,10 @@
+@import 'tailwindcss';
+
+/* Ordem importa: coss primeiro, tema do Pulso depois — os tokens do
+   produto precisam ganhar do default do registry. */
+@import './base.css';
+@import './coss.css';
+@import './theme.css';
+@import './legacy.css';
+
+@custom-variant dark (&:is(.dark *));

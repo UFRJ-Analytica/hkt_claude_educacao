@@ -1,0 +1,52 @@
+/* ============================================================
+   Reset de elemento do Pulso, em @layer base.
+
+   Por que uma camada: estas regras usam seletor de ELEMENTO
+   (`button`, `a`, `input`), não de classe. Sem camada elas ficariam
+   sem camada nenhuma — e CSS sem camada ganha de toda camada,
+   inclusive das utilities do Tailwind. Na prática isso zerava o
+   fundo e o padding de qualquer <Button> do coss, porque
+   `button { background: none; padding: 0 }` vencia `bg-primary`.
+
+   Em `base`, as utilities (camada posterior) passam a vencer o
+   reset, que é o comportamento que se espera delas. As regras de
+   CLASSE do legado seguem SEM camada de propósito: é o que mantém
+   "primitivo do coss + classe legada no mesmo elemento" idêntico
+   ao que a tela renderiza hoje.
+   ============================================================ */
+
+@layer base {
+  * { box-sizing: border-box; }
+  html, body, #root { height: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4, h5 { margin: 0; font-weight: 600; letter-spacing: -0.028em; text-wrap: balance; }
+  p { margin: 0; }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+  a { color: inherit; text-decoration: none; }
+  input, select { font: inherit; }
+}
+
+/* O foco fica FORA de camada, ao contrário do resto do reset.
+
+   O motivo é o oposto do que levou `button` para `@layer base`: ali o reset
+   precisava perder para as utilities (senão um <Button> do coss nascia sem
+   fundo). Aqui ele precisa ganhar — `buttonVariants` do coss traz
+   `outline-none` e as telas somam `focus-visible:ring-0` para apagar o anel
+   do registry; com o outline em camada, essas duas coisas juntas deixavam
+   botões SEM indicador de foco nenhum.
+
+   Sem camada, o contorno petróleo volta a ser o indicador de foco único de
+   toda a aplicação — que é o que se quer de um produto usado por teclado numa
+   secretaria, e mais consistente do que metade anel do coss, metade contorno. */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
