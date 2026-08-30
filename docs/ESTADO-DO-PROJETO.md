@@ -1,629 +1,766 @@
-# Pulso da Rede — estado do projeto
+# Vaga Certa — estado do projeto
 
-**Última atualização:** 29/08/2026, véspera do Claude Impact Lab Rio #2.
+**Última atualização:** 30/08/2026, 10h45 — briefing + transcrição integrados.
 
 Este é o documento de entrada. Se você é um agente que perdeu o contexto, ou uma
-pessoa entrando agora, leia este arquivo inteiro antes de tocar em código. Ele
-descreve o que existe, o que é real, o que é sintético, por que cada decisão foi
-tomada e o que falta.
+pessoa entrando agora, leia este arquivo inteiro antes de tocar em código.
+
+> **O contexto do projeto mudou hoje às 8h30.** O desafio revelado não é gestão
+> pedagógica da rede — é **inteligência no processo de Inscrição Creche**. Tudo
+> que este documento dizia antes sobre frequência, desempenho, turmas,
+> recomposição e Censo INEP está **obsoleto**. O que sobrevive é infraestrutura:
+> o mapa, a casca, o contrato de proveniência. Ver §9.
 
 ---
 
-## 1. O evento e o que decide a avaliação
+## 1. O desafio, em uma frase
 
-**Claude Impact Lab Rio #2** — domingo, 30/08/2026, 08h–20h, VTEX Botafogo.
-Parceria Prefeitura do Rio + Secretaria Municipal de Educação + Secretaria de
-Desenvolvimento Econômico. Times de 4 pessoas. Desafio único.
+A SME-Rio tem **vagas ociosas em creche e fila de espera expressiva ao mesmo
+tempo — às vezes no mesmo território**. A fila não é escassez global: é
+descompasso entre oferta e demanda por território e turno, agravado por uma
+mecânica de classificação que congela vagas. Três eixos:
 
-**O fato que organiza tudo:** o briefing, os datasets e os critérios só são
-revelados no domingo de manhã, e quem fornece é a própria SME. Não dá para
-pré-construir o produto certo. Dá para pré-construir três coisas:
+1. **quantas vagas abrir e onde** (Eixo 1 — Planejamento);
+2. **em que ordem chamar a fila** (Eixo 2 — Inscrição e Classificação);
+3. **como garantir que a família chegue à vaga dentro do prazo** (Eixo 3 —
+   Convocação).
 
-1. contexto de domínio, para entender o briefing às 9h05 e não às 10h;
-2. um caminho de ingestão que engole arquivo desconhecido em minutos;
-3. uma casca que aceita qualquer conteúdo e já mostra IA governada.
+Creche atende **0 a 3 anos e 11 meses** e **não é ensino obrigatório**. A partir
+dos 4 anos a SME oferece vaga imediata. **Creche é o único segmento racionado da
+educação infantil carioca** — por isso todo o aparato de pontuação e fila existe
+só aqui. Rede: **~89 mil alunos, ~900 unidades**.
 
-Pitches a partir das ~17h30; tempo real de construção ≈ 7h. As melhores soluções
-são doadas para a cidade — o que eleva o peso de auditabilidade e licença.
+Fontes: [README do evento](https://github.com/taicor-ai/claude-impact-lab-rio-2),
+[briefing](https://docs.google.com/document/d/1jZenYEKR2hJOVrxLXWM0xjxmoiohAqEl/edit),
+apresentação e **transcrição do briefing** (Coordenadoria de Inovação e
+Tecnologia da SME, gerência de Sistemas e Dados),
+[`dadoscreche`](https://github.com/CIT-SME-RJ/dadoscreche/).
 
-### A tese do produto
+### O relógio
 
-> O Pulso da Rede não substitui os sistemas da SME nem decide por gestores. Ele
-> conecta os dados do briefing a uma camada verificável de prontidão, indicadores
-> e evidências por escola e CRE, permitindo que gestores e Claude expliquem o que
-> os dados sustentam — e **bloqueiem o que não sustentam**.
+| horário | marco |
+|---|---|
+| 08h30 | briefing (feito) |
+| **16h30** | **prazo de entrega no GitHub** — e-mail para eventos@taicor.ai com nº do grupo |
+| 17h30 | 5 finalistas, 6 minutos cada, corte duro no tempo |
+| 18h30 | premiação |
 
-O diferencial não é "usamos IA". A SME já usa IA: formou 82 professores em maio
-de 2026 com a Recode, e a cidade ganhou o Bloomberg Mayors Challenge com IA para
-busca ativa. O diferencial é **IA governada sobre o dado deles**, com evidência
-citável e recusa explícita quando a cobertura não sustenta leitura.
+Restam ~6h de construção. Esse é o orçamento real e ele dita o escopo em §8.
 
-### O que NÃO propor
+### O que decide a nota
 
-**Preditor de evasão.** A SME já tem, construído com o IMDS, premiado
-internacionalmente. Abandono caiu para 0,1% em 2025. Propor isso é entregar ao
-cliente um projeto que ele já possui.
+Nota = (Impacto Real × 8) + (Produto × 4) + (Engenharia × 4) + (Ideia × 2) +
+(Apresentação × 2), cada critério de 1 a 5.
+
+**Impacto Real vale 40 de 100** e a pergunta é literal: *"a prefeitura usaria isso
+hoje?"*. Nota 5 é "pronto para usar como está". Isso empurra o projeto para **uma
+ferramenta que um servidor de CRE opera na segunda-feira**, não para um modelo
+preditivo bonito. Produto (20) exige que servidor não técnico opere sem treino.
+Engenharia (20) premia auditabilidade e robustez a dado sujo.
 
 ---
 
-## 2. Estado atual em uma página
+## 2. Regra 1 do evento — risco aberto que precisa de decisão humana
 
-| camada | origem | situação |
+> *"O projeto começa no evento. O primeiro commit deve ser feito após as 09h00 do
+> dia 30/08. Projetos com evidências de desenvolvimento anterior serão
+> desclassificados. Bibliotecas, frameworks e APIs preexistentes podem ser
+> usados; a lógica do projeto deve ser construída no dia."*
+
+Este repositório tem commits em 26/08 e 29/08:
+
+```
+b1336d7 2026-08-30 09:36:57  feat: componentiza o frontend sobre Tailwind v4 + coss ui
+4fe3df2 2026-08-29 21:21:14  feat: Adiciona dados oficiais do INEP
+1617af9 2026-08-29 12:09:41  feat: implementa frontend React e consolida etapa de dados
+18fc90b 2026-08-26 16:08:00  docs: establish Pulso da Rede architecture and research baseline
+```
+
+**Entregar este repositório como está é risco de desclassificação.** A decisão é
+do time, não do agente:
+
+| opção | o que é | risco |
 |---|---|---|
-| Contorno do município | IBGE malhas v3, município 3304557 | **real**, embutido no bundle |
-| Cadastro de escolas | Data.Rio/SME ArcGIS, CC-BY 4.0 | **real**, 1.588 unidades com coordenada |
-| CRE, tipo de equipamento, designação SME | mesma release | **real** |
-| Código INEP | — | **ausente**: a release Data.Rio não traz CO_ENTIDADE |
-| Frequência, desempenho, ocupação, carência | gerado localmente | **sintético**, rotulado por métrica |
-| Turmas, habilidades, aula entregue | fixture do contrato | **sintético**, tela declara |
+| **A — repo novo (recomendada)** | repositório público novo, primeiro commit hoje após 09h; portar só o que se defende como *biblioteca* (kit de UI, casca, adaptador DuckDB); escrever hoje toda a lógica de creche | baixo |
+| B — entregar este repo | histórico anterior visível | alto |
+| C — repo novo com squash | histórico some, mas o código de 29/08 continua sendo lógica de projeto | médio-alto |
 
-A API declara `school-identity` como `AVAILABLE / REAL_PUBLIC`. Todas as
-capacidades de indicador (`network`, `learning`, `attendance`, `capacity`,
-`staffing`) estão em `SCHEMA_ONLY`. A interface mostra uma faixa fixa avisando
-disso, e o selo do topo lê `REDE REAL · IND. SINTÉTICOS`.
+Sob a opção A, a fronteira defensável é: **primitivos genéricos de interface e
+scaffolding = biblioteca; qualquer coisa que saiba o que é fila, vaga,
+grupamento, pontuação ou CRE = escrita hoje.** O mapa fica no limite — a projeção
+e o gesto de pan/zoom são genéricos, o que ele desenha não é. Ver §9.
 
-**Isso é intencional e é o argumento.** Geografia real, indicadores rotulados,
-nenhuma confusão entre os dois.
+**Ação pendente:** o time escolhe A, B ou C antes de qualquer commit.
 
 ---
 
-## 3. Os dados — três camadas
+## 3. Como o processo funciona de verdade
 
-### 3.1 O que temos de verdade, hoje
+Da transcrição do briefing. **Esta seção é a mais importante do documento** — ela
+descreve a mecânica real, e é dela que sai o produto.
 
-**Limite do município.** IBGE, API de malhas v3, `3304557`, qualidade máxima.
-33 anéis, 1.043 pontos, 23 KB em `frontend/src/domain/rio-geometry.ts`.
-Continente, Ilha do Governador, Marambaia, Paquetá. Sem tiles externos — o mapa
-funciona offline, o que importa com wifi de evento.
+### 3.1 O fluxo
 
-**Cadastro oficial de escolas.** Data.Rio / ArcGIS / SME, layer
-`Educacao/SME/MapServer/1`, licença CC-BY 4.0. Publicado como release governada
-por `backend/scripts/import_official_school_identity.py` em
-`data/official/school_identity/`. 1.588 registros, 100% com coordenada, CREs 1–11.
+1. Responsável se inscreve no **matricula.rio** (celular, majoritariamente). CPF
+   obrigatório, **validado pela Receita Federal**. **Uma inscrição ativa por
+   CPF.** Escolhe de **1 a 5 unidades**, pesquisando por bairro; o site só mostra
+   unidades compatíveis com a idade da criança.
+2. **No dia seguinte**, o responsável leva documentação física a **uma das
+   unidades escolhidas** para comprovar vulnerabilidade. **A direção da unidade
+   confirma manualmente no sistema.**
+3. Em paralelo, a SME roda **validação automática** pelo **Data Lake da
+   Prefeitura**, integrando com o **Registro Municipal Integrado** (>12 milhões
+   de registros; Assistência Social, Educação, Saúde), pelo CPF, para confirmar
+   **CadÚnico, Bolsa Família e Pequenos Cariocas**. Esses dados **voltam para o
+   sistema de Inscrição Creche** e validam a pontuação.
+4. Classificação roda em **data publicada em Diário Oficial**. Resultado no site.
+5. Convocação **durante todo o ano**, conduzida pelo diretor da unidade.
+6. Família tem **3 dias** para comparecer com documentos (identidade, CPF,
+   caderneta de vacinação), com **no máximo 1 dia de extensão** em situação
+   atípica.
 
-Tipos reais na rede: Escola Municipal 911 · EDI 286 · Creche Municipal 247 ·
-CIEP 101 · Biblioteca Escolar 13 · Escola Especial 10 · Núcleo de Arte 9 ·
-Clube Escolar 6 · CEJA 2 · CDEI 1 · Escola Cívico-Militar 1.
+### 3.2 O defeito estrutural, nas palavras da SME
 
-Campo `neighborhood` vem **nulo** em todos os 1.588. Não rotule CRE por bairro:
-a fonte não sustenta. `inep_id` também vem nulo nos 1.588 — mas isso deixou de
-ser um beco sem saída (ver 3.1b).
+> *"No primeiro sistema eu tenho uma inscrição por CPF. Quando essa inscrição vai
+> para o módulo Inscrição Creche, ela pode se multiplicar por até cinco. Nossa
+> base anual de aproximadamente 45 mil inscritos normalmente se transforma em
+> mais de 100 mil registros. Porque fazemos uma classificação por opção. Essa é
+> uma informação muito importante: **a lógica atual é classificação por opção,
+> considerando até cinco opções para cada CPF**."*
 
-### 3.1b A ponte INEP — resolvida, por chave exata
+E a consequência, também nas palavras deles:
 
-**O Censo Escolar do INEP está carregado, com dado real por escola.**
+> *"Podemos chegar a oferecer até cinco vagas para a mesma criança. Mas essa
+> criança vai escolher apenas uma. **As outras quatro vagas ficam aguardando
+> esses três dias.** Depois, chama-se o próximo da fila. Mas se o próximo estiver
+> na mesma condição, temos novamente outro período de três dias. (…) **Às vezes
+> podemos levar mais de uma semana para conseguir colocar uma criança em uma
+> vaga** (…) enquanto isso **existe uma vaga ociosa e nenhuma criança sendo
+> atendida nela**."*
 
-A ponte parecia impossível porque o Data.Rio não publica `CO_ENTIDADE` e o
-projeto proíbe match por nome. Mas o INEP grava o nome da escola municipal do
-Rio como `<designação de 7 dígitos> <nome>`:
+**Medi essa inflação no dado real** (§5.2): a fila de 2025 tem **16.345 posições
+publicadas para apenas 7.851 crianças — fator 2,08×**, e **796 crianças ocupam 5
+posições cada**. O diretor que olha uma fila de 100 não tem 100 crianças; tem
+~48. E gasta 3 dias por chamada para descobrir isso.
 
-```
-0102002 EM TIRADENTES
-0101501 CIEP HENFIL
-0101803 EDI ANTONIO RAPOSO TAVARES
-```
+### 3.3 A armadilha da recusa
 
-A designação é exatamente a chave que o Data.Rio publica em `sme_designation`.
-**Isso é junção por chave, não similaridade textual** — a distinção que separa
-esta ponte da que o projeto proíbe. A chave casa ou não casa, e a cobertura é
-medida.
+> *"Se oferecemos aquela vaga e ele não aceita, ele pode sair das demais filas de
+> espera porque já houve um oferecimento de vaga. Isso pode fazer com que esse
+> responsável tenha que voltar a se inscrever."*
 
-Publicado por `backend/scripts/import_inep_census.py` em
-`data/official/inep_census/`, mesmo padrão content-addressed do cadastro.
-Censo 2024, 1.556 escolas, release `baf77242…`.
+Recusar uma vaga inviável custa **todas** as outras posições. A família racional
+aceita uma vaga que não vai usar, ou some. Isso alimenta o cancelamento e o
+abandono de §5.5.
 
-**Cobertura: 1.546 de 1.588 (97,4%).**
+### 3.4 O gargalo da convocação: o contato morreu
 
-| tipo | unidades | com INEP | matrícula real | turmas reais |
+> *"O telefone não se atualiza, o WhatsApp não se atualiza (…) a partir do
+> momento em que rodamos uma classificação em janeiro, às vezes em fevereiro ou
+> março aquele responsável já trocou de contato (…) essa criança pode perder a
+> vaga porque a família não foi localizada."*
+>
+> *"O diretor precisa se lembrar: 'esse responsável veio aqui, eu tenho no meu
+> caderninho um contato novo dele'. **Como não conseguimos editar esses dados
+> adequadamente, perdemos algumas vagas dessa forma**."*
+
+O problema nº 1 da convocação **não é o algoritmo, é o número de telefone**. E há
+um caderno de papel no meio do fluxo.
+
+### 3.5 A restrição jurídica
+
+> *"Temos órgãos reguladores que acompanham essa fila e as bases de dados. Então
+> sempre seguimos a ordem."*
+
+Qualquer proposta que **quebre a ordem de prioridade é inviável**, por mais
+eficiente que seja. Isso elimina "otimização global de bem-estar" e favorece
+mecanismos que **provadamente respeitam a prioridade** — ver §7.
+
+### 3.6 O planejamento
+
+Três níveis: **nível central** (define métricas e dados, tem site próprio de
+Planejamento de Matrícula, começa em setembro para o ano seguinte) → **11
+Coordenadorias Regionais** → **microáreas** (clusters de unidades com relação
+territorial, base do Instituto Pereira Passos). Âncora atual: **demanda histórica
+do ano anterior**, alunos ativos e alunos que saíram. A pergunta deles é literal:
+*"Será que conseguimos antecipar algum dado que hoje não estamos olhando?"*
+
+---
+
+## 4. Os dados
+
+Tudo em [`CIT-SME-RJ/dadoscreche`](https://github.com/CIT-SME-RJ/dadoscreche/),
+clonável sem autenticação. Separador `;`, UTF-8 **com BOM**.
+
+### 4.1 As quatro bases da inscrição
+
+| arquivo | linhas | grão |
+|---|---:|---|
+| `01_QueryA_InscricoesPorAno.csv.gz` | 837.179 | uma **opção de creche escolhida** |
+| `02_QueryB_RespostasSocioEconomicas.csv.gz` | 4.357.119 | uma **pergunta respondida** |
+| `03_QueryC_PerguntasComDescricao.csv` | 65 | uma pergunta por processo/ano |
+| `04_UnidadesEscolaresComEndereco.csv` | 2.188 | uma unidade escolar |
+
+Chaves: `(prm_id, plm_id, ipl_id)` liga A↔B. `ich_perg_id` liga B↔C (**muda a cada
+ano**); `perg_id` é a chave estável entre anos. `unidade` (A) ↔ coluna 1 de D.
+Cobertura: 2021–2025 (processos 179, 181, 184, 194, 195). O processo vigente
+(2026) **não** está incluído.
+
+### 4.2 As bases complementares
+
+| arquivo | conteúdo | por que importa |
+|---|---|---|
+| `OferecimentosEvagas/Unidades_Unificadas_com_Localizacao.xlsx` | 1.941 unidades com **CRE, microárea, bairro, latitude, longitude, tipo** | **é o que faz o mapa existir** |
+| `OferecimentosEvagas/totalalunoscreche20NN.xlsx` | alunos e turmas por unidade × grupamento × turno | lado da **oferta/ocupação** |
+| `OferecimentosEvagas/Parceiras20NN.xlsx` | monitoramento mensal das conveniadas | oferta da rede parceira |
+| `Microáreas_SME_revisãoIPP/*.shp` | shapefile das microáreas SME/IPP | **o recorte territorial que a CRE realmente usa** |
+| `NascidosvivosRJ.xlsx` | nascidos vivos no município | demanda potencial futura |
+
+**Verificado:** o código de unidade da Query A casa com `DESIGNACAO` do xlsx de
+localização **depois de remover zeros à esquerda** (`ltrim(unidade,'0')`).
+Cobertura: **852 de 872 unidades (97,7%) ganham latitude/longitude.** Sem essa
+normalização o casamento cai para 150/872 — a primeira armadilha do dia.
+
+### 4.3 Armadilhas confirmadas
+
+- `04_UnidadesEscolaresComEndereco.csv` **não tem cabeçalho**. Ler com
+  `header=False`, senão a primeira unidade some.
+- O valor gravado é `Cancelado na confirmacao` — **sem cedilha e sem til**.
+  Filtrar com acento devolve zero linhas.
+- `pergunta_legenda` é **nula em 100%** das linhas em B e C. Usar `pergunta_texto`.
+- A Query B tem 4,36 milhões de linhas e **não abre no Excel** (teto de
+  1.048.576). Usar DuckDB — `read_csv_auto(..., delim=';')` lê o `.gz` direto,
+  sem descompactar e sem carregar tudo em memória.
+- `duckdb` já está no venv do backend. **Não há pandas, numpy nem geopandas** —
+  `.df()` quebra com `'numpy' is required`. Usar `.fetchall()` ou SQL puro.
+- A régua de pontuação **muda todo ano**. Comparar posição entre anos sem
+  normalizar produz série temporal falsa (§5.4).
+- **Pequenos Cariocas** é critério vigente segundo a transcrição, mas **não
+  aparece na Query C de 2025**. Provavelmente entrou em 2026, fora do extrato.
+
+### 4.4 O aviso de anonimização — e o que ele significa para o pitch
+
+O repositório é explícito: *"indicadores gerados a partir dos dados **NÃO**
+representam a realidade"*. O que **não** é confiável: números absolutos, endereço
+exato, identidade, data exata de nascimento. O que **está preservado**, e a
+transcrição confirma: a **sequência do processo**, a **lógica da pontuação**, as
+**relações entre as quatro tabelas** e a **dinâmica real de transição de
+estados**.
+
+**Consequência estratégica:** o entregável não é um relatório com números. É um
+**motor determinístico que a SME roda sobre o dado dela**, demonstrado sobre o
+extrato anonimizado. Todo número na tela carrega origem, data de referência e a
+faixa de anonimização — a mesma disciplina de proveniência que este projeto já
+tinha, agora com motivo muito mais concreto.
+
+---
+
+## 5. O que o dado sustenta — análise feita hoje
+
+Calculado em DuckDB sobre o extrato anonimizado, em 30/08/2026. Consultas
+reproduzíveis em §12. **Ler como ordem de grandeza e como estrutura, nunca como
+estatística oficial** (§4.4).
+
+### 5.1 O funil, por criança
+
+| ano | crianças | confirmadas | % | só lista de espera |
 |---|---:|---:|---:|---:|
-| Escola Municipal | 911 | 902 | 435.227 | 14.585 |
-| EDI | 286 | 284 | 67.688 | 3.028 |
-| Creche Municipal | 247 | 246 | 33.364 | 1.527 |
-| CIEP | 101 | 101 | 60.769 | 2.280 |
-| Escola Especial | 10 | 10 | 994 | 113 |
-| CEJA | 2 | 2 | 614 | 59 |
-| Cívico-Militar | 1 | 1 | 554 | 16 |
-| Biblioteca, Núcleo de Arte, Clube, CDEI, Polo | 30 | 0 | — | — |
-| **total** | **1.588** | **1.546** | **599.210** | **21.608** |
+| 2021 | 57.690 | 29.113 | 50,5% | 22.565 |
+| 2022 | 57.820 | 34.795 | 60,2% | 14.776 |
+| 2023 | 45.918 | 28.199 | 61,4% | 12.493 |
+| 2024 | 71.757 | 50.954 | 71,0% | 13.163 |
+| 2025 | 62.899 | 48.680 | 77,4% | 7.834 |
 
-Os 30 com zero não são lacuna: **não são escolas no Censo**. É o mesmo
-`NÃO SE APLICA` da seção 6 — o dado não deveria existir para eles.
+A rede melhorou muito — **de 50,5% para 77,4% em cinco anos**. Reconhecer isso no
+pitch é obrigatório: chegar dizendo "está tudo quebrado" para quem subiu 27
+pontos percentuais é a forma mais rápida de perder o júri. O produto ataca o
+resíduo, e o resíduo tem nome e endereço.
 
-**O que passa a ser real por escola:** matrícula total, por etapa e **por ano de
-escolaridade** (1º ao 9º, separadamente); turmas por etapa; docentes por etapa;
-salas utilizadas, climatizadas e acessíveis; computadores, portáteis e tablets
-para aluno; e 19 indicadores de infraestrutura — internet, internet para aluno,
-biblioteca, sala de leitura, quadra, laboratórios, refeitório, alimentação,
-banheiro PNE, rampas, elevador, água potável, esgoto e energia de rede.
+Em 2025, **72% das confirmações saem da 1ª opção** (35.144 de 48.688). A
+preferência declarada é forte e é atendida na maioria dos casos.
 
-**Isto derruba parte do sintético, e derrubou errado antes.** A Escola Municipal
-Tiradentes tinha 334 matrículas e 12 turmas do 1º ao 6º ano no sintético. O real
-é 195 matrículas, 8 turmas, 12 docentes e **zero no 6º ano** — é uma escola só
-de anos iniciais. O sintético inventava um segmento que a escola não tem.
+### 5.2 A fila publicada é o dobro da fila real
 
-**O que continua sem fonte real:** frequência, desempenho por descritor, carência
-docente, movimentação de matrícula e aula entregue. Nenhum deles está no Censo —
-são do pipeline da SME (3.2) ou do briefing (3.3).
+Confirmação quantitativa de §3.2. Linhas em `Lista de espera` contra crianças
+distintas:
 
-### 3.2 O pipeline da SME — verificado, sem acesso ao dado
+| ano | posições na fila | crianças reais | inflação |
+|---|---:|---:|---:|
+| 2021 | 68.392 | 22.770 | **3,00×** |
+| 2023 | 29.715 | 12.917 | 2,30× |
+| 2024 | 30.941 | 13.838 | 2,24× |
+| 2025 | 16.345 | **7.851** | **2,08×** |
 
-Repositório **público**: `github.com/prefeitura-rio/pipelines_rj_sme`, diretório
-`queries/models`. O que é público são as **definições dbt**; as tabelas vivem no
-BigQuery municipal e exigem credencial (acesso pedido no Discord `#peça-permissão`).
+Em 2025, **796 crianças ocupam 5 posições cada**; 647 ocupam 4. Só 3.956 das
+7.851 estão numa fila única.
 
-**Temos o schema. Não temos as linhas.** Suficiente para modelar os formatos
-certos antes do briefing; não autoriza afirmar cobertura.
+> **A fila de espera de creche do Rio, em 2025, tinha 16.345 posições e 7.851
+> crianças. Metade da fila é a mesma criança contada de novo.**
 
-#### `educacao_basica` — 9 modelos centrais
+Isso distorce o planejamento (que se ancora na "demanda manifesta" da fila do ano
+anterior — §3.6), distorce a comunicação com a família e distorce o trabalho do
+diretor, que gasta 3 dias por chamada para descobrir que a criança já foi
+atendida em outro lugar.
 
-| modelo | o que é |
-|---|---|
-| `escola` | unidade escolar — **tem `id_inep` E `id_designacao`**, mais `cre`, `micro_area`, `polo`, contagem de salas |
-| `aluno` | matriculados no ano corrente; tem `cpf`, `nome`, `raca_cor`, `bolsa_familia`, `cartao_familia_carioca` |
-| `aluno_historico_2025` | histórico e dados pessoais; `nome`, `endereco`, `cep`, `filiacao_1/2`, `cpf`, `nis_aluno`, `nis_resp`, `religiao` |
-| `aluno_turma` | ponte aluno ↔ turma |
-| `coc` | **COC = Conselho de Classe**; alunos, vagas, capacidade, turno, grupamento. Desde 2014 |
-| `avaliacao` | **notas do COC por disciplina, 0 a 10**, mais conceito e frequência |
-| `frequencia` | faltas por disciplina, `dias_letivos`, `tempos_letivos`, `carga_horaria_semanal`. Desde 2012 |
-| `movimentacao` | entradas e saídas de aluno. Desde 1973 |
-| `dependencia` | salas e espaços, com capacidade e área |
+### 5.3 A fila está a 1,1 km da vaga
 
-#### `educacao_basica_frequencia` — 8 modelos
+Recortando 2025 por **unidade × grupamento × turno** (2.138 pares):
 
-O achado mais importante do projeto está em `frq_frequencia`, descrita como
-*"frequência diária dos alunos no ano letivo corrente"*, atualizada diariamente:
+- **1.346 pares (63%) terminaram o ano sem nenhuma criança em lista de espera.**
+- **359 das 836 unidades (43%) não tiveram fila alguma.**
+- 324 pares concentram fila relevante (≥10 crianças), somando **14.543 posições**.
+- Para cada par com fila, medi a distância até o par **mais próximo com o mesmo
+  grupamento, o mesmo turno e fila zero**:
 
-```text
-id_situacao: 1 – Aula prevista · 3 – Excluído · 4 – Aula dada · 6 – Aula cancelada
-```
+| métrica | valor |
+|---|---:|
+| distância mediana até uma vaga livre equivalente | **1,10 km** |
+| pares com alternativa a ≤ 2 km | **74,7%** |
+| pares com alternativa a ≤ 3 km | **90,7%** |
 
-Mais `plano_aula`, `diario_classe`, `efetivado`, `numero_aula`, `data_aula`.
+> **Três em cada quatro filas do Rio têm, a menos de 2 km, uma creche do mesmo
+> grupamento e do mesmo turno que ninguém está pedindo.**
 
-Isso resolve de forma **exata** a distinção que nenhum sistema da rede publica:
+Responde à pergunta literal do Eixo 1: *"não ter vagas ociosas ao mesmo tempo em
+que existem filas de espera, talvez até no mesmo território"*. **Sim, é no mesmo
+território — a mediana é 1,1 km.**
 
-| estado | origem |
-|---|---|
-| aula dada, estudante presente | `id_situacao = 4`, sem falta |
-| aula dada, estudante ausente | `id_situacao = 4` + `faltas_disciplina_dia` |
-| aula cancelada — oferta interrompida | `id_situacao = 6` |
-| prevista sem lançamento — registro faltando | `id_situacao = 1` sem par em 4 |
+**Onde dói:** a CRE 7 sozinha responde por **8.109 das 14.543 posições em espera
+(56%)**, com mediana de 2,04 km até a vaga livre — a maior da cidade. Unidades no
+topo (espera / confirmados): CM Rio Novo–Rio das Flores **765/67**, EDI Clarice
+Lispector **580/70**, CM Otávio Henrique de Oliveira **560/94**.
 
-`vw_alunos_frequencia_acumulada` documenta a fórmula da rede:
-`100 - (total_faltas / total_aulas) * 100`. Use a deles, não invente outra.
+### 5.4 A pontuação declarada quase nunca aparece como confirmada
 
-#### `educacao_basica_avaliacao` — 3 modelos
+A ordem da fila vem da soma de pontos das respostas. Cada resposta tem uma marca
+`confirmado`. Cruzando B com a régua de C:
 
-`prova_rio` traz o que sustenta a matriz de habilidades: `cd_habilidade`,
-`dc_habilidade_acerto`, `dc_habilidade_total`, `nu_acerto`, `tx_acerto`,
-`vl_proficiencia`, `vl_proficiencia_erro`, e `dc_padrao` com os quatro níveis
-oficiais — **Abaixo do Básico · Básico · Adequado · Avançado**. Grão: aluno ×
-disciplina, com `esc_id` e `tur_id`.
+| ano | inscrições | pontos médios **declarados** | pontos médios **confirmados** | inscrições que perdem pontos |
+|---|---:|---:|---:|---:|
+| 2021 | 65.159 | 36,19 | 31,88 | 4,8% |
+| 2022 | 64.055 | 32,77 | 3,11 | 33,4% |
+| 2023 | 51.331 | 55,60 | 3,99 | 50,0% |
+| 2024 | 82.688 | 21,21 | 1,73 | 63,5% |
+| 2025 | 71.930 | 27,71 | **1,98** | **63,0%** |
 
-Mais `avaliacao_bimestral_2012_a_2019` e `avaliacao_bimestral_2021_a_2024`.
+Por pergunta em 2025, a taxa de confirmação é uniformemente baixa: **CadÚnico
+(51 pontos, o critério de maior peso) tem 35.141 declarações e 6,8%
+confirmadas**; público-alvo da educação especial, 13,3%; violência doméstica,
+18,2%.
 
-#### Não verificados
+**Ressalva obrigatória.** A transcrição diz que a validação automática por
+Data Lake/RMI existe e que *"esses dados voltam para o sistema de Inscrição
+Creche para validar a pontuação"*. Se isso escreve em `resp_confirmado`, então
+6,8% de confirmação para CadÚnico é um achado grave. Se escreve em outro campo,
+o número é artefato de extração. **Não afirmar "63% das famílias perdem pontos"
+como fato.** Afirmar: *"a base entregue mostra 63% das inscrições sem confirmação
+registrada neste campo; qual campo recebe o retorno do Data Lake?"* — pergunta 1
+de §10. Dita no palco, essa ressalva vale mais para Engenharia que o número cru.
 
-`educacao_basica_alocacao` (`disciplinas_sem_professor`), `brutos_core_sso` e
-`brutos_gestao_escolar`. O último é o nome mais promissor da lista.
+### 5.5 Abandono silencioso
 
-### 3.2b Sintéticos nos schemas deles
+Das 13.163 crianças que esperaram em 2024 sem vaga, **apenas 7.512 se
+reinscreveram em 2025**. **5.651 famílias (43%) saíram do processo.** Combinado
+com §3.3 — recusar uma vaga inviável custa todas as outras posições — isso tem
+explicação mecânica, não só desistência.
 
-`frontend/src/api/pipeline.ts` gera dados **nas formas do pipeline da SME**, no
-grão que o produto consome — turma para cima, nunca linha de aluno:
+### 5.6 A fila é contínua, não é um evento
 
-- `movimentacao` → entradas, saída interna, saída externa, trajetórias
-  interrompidas (contagem, jamais lista);
-- `disciplinas_sem_professor` × `id_situacao` → carência por disciplina cruzada
-  com aula cancelada;
-- `grupamento` → corte do 1º ao 9º ano, com a transição do 5º para o 6º.
+`data_criacao` do processo 2025 vai de **10/12/2024 até 24/08/2026**. Inscrições
+entram o ano inteiro. Bate com a transcrição: *"o processo de convocação acontece
+durante todo o ano"*. O calendário oficial de 2026 (inscrições 09–12/12/2025,
+classificação 13/01, resultado 21/01, confirmação 22–29/01) descreve o pico, não
+o regime.
 
-`raca_cor`, `bolsa_familia` e `cartao_familia_carioca` **não são gerados** — são
-sensíveis pela LGPD e só entram com autorização explícita do briefing.
+**Consequência:** a ferramenta certa é um **painel de operação contínua**, não um
+relatório anual — exatamente o gap que o briefing descreve e que a transcrição
+detalha como *"monitoramentos constantes e muitos fluxos manuais (…) olhar a base
+de dados, gerar consolidados e enviar relatórios"*.
 
-A spec para o backend produzir a release governada equivalente está em
-`docs/api/backend-agent-sme-pipeline-synthetic-handoff.md`.
+### 5.7 O que o dado NÃO sustenta — e por que dizer isso ganha pontos
 
-### 3.3 O que provavelmente virá no briefing
+A apresentação afirma (slide 5) que o ponto crítico é *"a escolha das 5 unidades
+feita sem qualquer critério de distância"*. **Testei e o dado sustenta apenas em
+parte.** Estimando a família pelo centroide do bairro declarado:
 
-**Alta probabilidade:** recorte anonimizado de avaliação, turma e frequência;
-resultados de simulados de Português e Matemática; identificadores de escola,
-CRE, ano e período; contexto do DiáRio; pedido de protótipo com Claude.
+| ano | distância mediana família → opção | % das opções acima de 5 km |
+|---|---:|---:|
+| 2021 | 1,57 km | 6,4% |
+| 2025 | **1,36 km** | **6,0%** |
 
-**Média:** movimentação e histórico; Prova Rio e bimestrais; dados territoriais;
-sinais de professor e turma, incluindo disciplinas sem professor.
+As famílias já escolhem perto. A confirmação cai de 32,3% (<1 km) para 27,1%
+(5–10 km) — o efeito existe, mas é modesto. O centroide de bairro é régua
+grosseira e a anonimização suprimiu o logradouro, o que achata o sinal.
 
-**Baixa:** CPF, laudos, comunicação familiar, acesso irrestrito ao Lake, decisão
-automática sobre aluno ou professor.
+A conclusão operacional é **mais forte que a hipótese original**:
 
-### 3.4 Evidência da agenda atual da SME
+> O problema não é que a família escolhe longe. É que **a oferta não está onde a
+> demanda está**, e a demanda se concentra em poucas unidades muito procuradas
+> enquanto vizinhas equivalentes ficam vazias. As 10% de unidades mais procuradas
+> concentram **28,4% da 1ª opção de toda a cidade**.
 
-**Circular E/SUBE/CAV nº 08/2026, de 24/08/2026** — cinco dias antes do evento —
-orienta a **Atividade Diagnóstica em Rede do 3º bimestre**: 1º ao 9º ano mais
-Carioca I e II, Português, Matemática e Ciências, cartões-resposta com leitura
-ótica, resultados no Rioeduca em Ação e no GPÁgil, devolutiva **por aluno e por
-turma**, uso em encontros pedagógicos, relatórios de níveis de aprendizagem.
-
-O **Trilhas de Recomposição** (05/2025, IplanRio + SME, integrado ao DiáRio) é
-precedente institucional relevante, mas **não há menção pública a ele em 2026**.
-Trate como antecedente, não como prioridade comprovada.
-
-Vocabulário da casa: GET, CRE, EDI, Bora pra Escola, Rio Alfabetiza, PPPS, Prova
-Rio, Rioeduca em Ação. Marcas aposentadas que não devem ser citadas: "Escolas do
-Amanhã", "Ginásio Carioca".
-
----
-
-## 4. Arquitetura
-
-Monólito modular. Backend FastAPI, frontend React, implantáveis separadamente.
-
-```text
-React / registro de features
-        ↓ HTTP + OpenAPI
-FastAPI routers
-        ↓
-use cases
-        ↓
-contratos de domínio + políticas determinísticas
-        ↑
-adapters: arquivos, DuckDB, SQLite, provider de modelo, mapa
-```
-
-**Dois planos de dados.** Analytics: DuckDB read-only sobre Parquet, release
-content-addressed promovida por ponteiro atômico (`data/generated/current.json`).
-Controle: SQLite sem PII — `agent_runs`, `investigations`, `meetings`,
-`action_items`, `audit_events`, mais `dataset_descriptors`, `mapping_proposals`,
-`join_registrations`, `join_audits`.
-
-**Regras de dependência:** domínio não importa FastAPI, DuckDB nem SDK; routers
-coordenam e não calculam regra; frontend não replica fórmula; agentes usam
-ferramentas estreitas, nunca banco direto; composição registra módulos
-explicitamente, sem descoberta mágica.
+Dizer no palco "testamos a hipótese de vocês, ela é parcial, e o dado aponta para
+outro lugar" é o movimento mais forte disponível hoje: verificável, respeitoso, e
+prova que o time leu o dado em vez de ilustrar o slide.
 
 ---
 
-## 5. O que está construído
+## 6. O que NÃO propor
 
-### 5.1 Backend — endpoints
+A transcrição mata duas ideias que pareciam boas às 9h. Propor qualquer uma é
+entregar ao cliente algo que ele já tem — o erro mais caro em Impacto Real.
 
-```text
-GET   /health
-GET   /api/v1/capabilities
+- **Validação automática de CadÚnico e Bolsa Família via base da Assistência
+  Social. Eles já fazem.** Data Lake da Prefeitura + Registro Municipal
+  Integrado, >12 milhões de registros, pelo CPF, com retorno para o IC. Citar o
+  RMI pelo nome como *base do que já existe* é bom; propor como novidade é fatal.
+- **Preditor de demanda.** Com 6h e base anonimizada é indefensável, e o
+  planejamento é atacado melhor por contabilidade territorial explícita (§5.3)
+  que por regressão.
 
-GET   /api/v1/schools/official?cre=&limit=      cadastro real, 1.588 unidades
-GET   /api/v1/schools/resolve                   por school_id, INEP ou designação
-GET   /api/v1/schools/{id}/context               painel da escola, sempre abre
-GET   /api/v1/schools/{id}/profile
-GET   /api/v1/schools/{id}/turmas                grão de turma
-GET   /api/v1/schools/{id}/skills?period=        matriz de habilidades
-GET   /api/v1/map/schools                        GeoJSON governado
+Também fora: autenticação, multi-tenant, substituir o ICH ou o matricula.rio.
 
-GET   /api/v1/network/snapshot?cre=&school_id=&turma_id=
-GET   /api/v1/data/quality?cre=
-GET   /api/v1/evidence/{evidence_id}
+---
 
-POST  /api/v1/data/profile                       intake de arquivo desconhecido
-GET   /api/v1/data/datasets
-GET   /api/v1/data/readiness/{dataset_id}
-GET   /api/v1/data/mappings/{dataset_id}/proposal
-POST  /api/v1/data/joins  ·  /joins/{id}/approve  ·  /joins/{id}/audits
+## 7. O produto — Vaga Certa
 
-POST  /api/v1/ai/briefings                       IA governada sobre evidências
-POST  /api/v1/ai/school-action-plans             plano de ação por escola
-GET   /api/v1/strategy/data-plan                 plano de adaptação ao briefing
-```
+> **Vaga Certa** trata a fila de creche como uma operação de alocação, não como
+> uma lista. Ele mostra onde a fila e a vaga ociosa se encontram no território;
+> substitui a classificação por opção por **alocação por criança**, liberando as
+> vagas congeladas sem alterar a ordem de prioridade; e conduz a convocação com
+> contato vivo, relógio e alternativa.
 
-**Contratos-chave.** `ScopeType` = NETWORK · CRE · SCHOOL · TURMA.
-`AnalyticsIndicatorId` = attendance_rate, assessment_score, capacity_utilization,
-teacher_shortage_rate, assessment_participation, skill_mastery_rate,
-lessons_delivered_rate. `ObservationDimensions` = subject, grade, skill_id,
-skill_label, proficiency_level, period_label.
+Nome é proposta; alternativa **Match Creche**, ecoando o slide 1 da SME ("Match
+Perfeito"). Decidir em 5 minutos e não voltar ao assunto.
 
-**Intake.** Formatos `.csv .json .jsonl .ndjson .parquet .xlsx`. Detecta encoding
-(UTF-8, BOM, latin-1) e delimitador (`,` `;` tab). XLSX com preflight anti-zip-bomb.
-Limite 10 MB. Área confinada `.intake/`. **Nunca devolve valor de célula** — só
-metadados, estatísticas e flags de PII. Veredito `READY / REVIEW / BLOCKED`.
+### 7.1 Motor de alocação por criança — o coração
 
-**IA.** O modelo **não consulta nada**: o chamador resolve os `evidence_ids` no
-snapshot e o modelo narra o que já passou pela governança. Provider `fake`
-determinístico por padrão; `anthropic` opt-in e fail-closed. Resposta traz
-`guardrails` e `policy` com `raw_rows_access: denied` e
-`decision_automation: denied`.
+**Este é o item de maior valor do dia** e responde à pergunta que a própria SME
+fez: *"é possível mudar a lógica de classificação para otimizar o preenchimento
+das vagas?"*
 
-### 5.2 Frontend — telas
+Hoje: classificação **por opção**. Uma criança entra em até 5 filas, pode receber
+até 5 ofertas, e as 4 recusadas ficam congeladas 3 dias cada — cascateando (§3.2).
 
-Todas as telas de recorte aceitam escopo de **escola**, não só de rede e CRE.
-Clicar numa unidade no mapa e não conseguir ver nada dela era o buraco mais
-visível do produto: o ponto estava pintado por um indicador que o painel se
-recusava a mostrar. `IDENTITY_ONLY` do backend significa que **o snapshot do
-backend** não tem métrica para aquele identificador — não que nada possa ser
-exibido. A camada de demonstração local tem os números, são os mesmos que
-pintam o ponto, e a Escola 360 os mostra dizendo de onde vieram.
+Proposta: classificação **por criança**, com **aceitação diferida** (o mecanismo
+de Gale–Shapley com capacidades, o mesmo usado em alocação escolar em Boston,
+Nova York e Amsterdã):
 
-`frontend/src/screens/`
+1. cada criança tem uma preferência ordenada (a `opcao` 1–5 que ela já declara);
+2. cada unidade × grupamento × turno tem uma capacidade e uma **prioridade —
+   exatamente a pontuação de vulnerabilidade vigente**;
+3. cada rodada, a criança "aplica" para a melhor unidade que ainda não a
+   rejeitou; a unidade retém provisoriamente as de maior prioridade até a
+   capacidade e libera as demais **imediatamente**;
+4. repete até estabilizar. **Cada criança sai com no máximo uma oferta.**
 
-| tela | rota | o que faz |
+Três propriedades que importam para esta secretaria, nesta ordem:
+
+- **A ordem de prioridade é preservada por construção.** Nenhuma criança de menor
+  pontuação ocupa vaga que uma de maior pontuação queria. Isso é demonstrável, e
+  é a resposta direta à restrição de §3.5 ("órgãos reguladores acompanham essa
+  fila"). Sem essa propriedade a proposta seria inviável, por mais eficiente que
+  fosse.
+- **As 4 vagas congeladas por criança desaparecem** — a liberação é na rodada, não
+  em 3 dias.
+- **É à prova de estratégia**: a família declara a preferência verdadeira sem
+  risco, o que remove o incentivo perverso de §3.3.
+
+**A demonstração:** rodar os dois mecanismos sobre a base real de 2025 e comparar
+vagas congeladas, rodadas de convocação e crianças atendidas. Os dados
+necessários já existem: preferência (`opcao`), prioridade (B+C) e capacidade
+(confirmados por par, ou `totalalunoscreche`). É ~80 linhas de código e é o slide
+que ganha o critério Ideia sem abrir mão de Impacto Real.
+
+Honestidade obrigatória no palco: a aceitação diferida **não cria vagas**. Ela
+elimina o congelamento e encurta o tempo até a matrícula. O que cria vaga é o
+Eixo 1.
+
+### 7.2 Mapa do descompasso — Eixo 1
+
+Cada unidade é um ponto sobre o contorno real do município. A cor mede a pressão
+do par unidade × grupamento × turno: fila represada de um lado, ociosidade do
+outro. Ao selecionar uma unidade saturada, o mapa **traça as linhas até as
+unidades equivalentes com fila zero no raio de 2 km**, com a contagem de crianças
+e a distância. Filtros por CRE, **microárea**, grupamento e turno — microárea
+porque é o recorte que a CRE usa de fato (§3.6).
+
+Duas saídas, ambas exportáveis: *"abrir turma aqui"* e *"a demanda desta fila cabe
+naquela unidade"*. E uma correção de leitura que só este produto oferece: **a
+fila mostrada é por criança, não por posição** (§5.2) — o planejamento deixa de
+superestimar a demanda em 2×.
+
+### 7.3 Convocação com contato vivo — Eixo 3
+
+A transcrição é inequívoca: o gargalo é o telefone, não o algoritmo (§3.4).
+
+- **Painel de chamadas em aberto** por unidade, ordenado por tempo em
+  `Selecionado`, com o prazo de 3 dias, o dia de extensão e o rastro de
+  tentativas por canal. Substitui o "caderninho" do diretor e os consolidados
+  manuais enviados às CREs.
+- **Alcançabilidade antes da convocação:** marcar a fila com o risco de contato
+  frio (tempo desde a inscrição, tentativas anteriores falhas) e **pré-aquecer**
+  as próximas N famílias antes de a vaga abrir — para que os 3 dias comecem com
+  contato válido. Em produção, o contato mais recente vem do próprio RMI, que
+  agrega Saúde e Assistência (a família que sumiu da Educação apareceu no posto).
+- **Atualização de contato em um clique**, com registro de quem alterou — o buraco
+  que a SME nomeou explicitamente.
+- **Alternativa na hora da chamada:** se a família não pode aquela vaga, o
+  operador vê a vaga livre equivalente a ~1 km e a oferece **antes** de perder o
+  contato, em vez de acionar a penalidade de §3.3.
+
+### 7.4 Onde Claude entra, e onde não entra
+
+**Princípio inegociável:** *números e regras de negócio são calculados por código
+determinístico, nunca por LLM.* Distância, pontuação, ordem da fila, resultado da
+alocação — tudo SQL e código auditável. Claude:
+
+- **explica a posição** à família em linguagem simples ("você está em 14º no
+  Berçário integral do EDI X; seu CadÚnico foi confirmado e vale 51 pontos"), a
+  partir de números que recebe prontos — respondendo ao gap do briefing sobre
+  explicar por que a posição mudou de um ano para o outro;
+- **redige a convocação** por canal (WhatsApp, SMS, e-mail, roteiro de ligação),
+  com prazo, endereço e documentos corretos, para revisão humana antes do envio —
+  o trabalho que hoje consome o diretor;
+- **é o copiloto da CRE**: "onde abro turma de Berçário integral na CRE 7?"
+  responde com a lista determinística e cita a evidência;
+- **lê a norma** (Resolução SME nº 542, de 18/11/2025, Anexo I, Cap. III, arts. 5º
+  a 17) para justificar cada recomendação contra a base legal vigente.
+
+Nenhum desses usos produz um número. Todos citam fonte. É isso que o critério
+Engenharia chama de auditável, e é o que separa o projeto de um chatbot.
+
+---
+
+## 8. Plano do dia — 10h45 às 16h30
+
+Ordem de prioridade; corta de baixo para cima. **Nada entra sem aparecer na demo.**
+
+### P0 — a demo mínima que já ganha (10h45–13h00)
+
+1. **Decidir a Regra 1** (§2). Bloqueia todo commit. 5 minutos.
+2. **Ingestão**: Query A + C + D + xlsx de localização em DuckDB, com
+   `ltrim(unidade,'0')` no join e as armadilhas de §4.3 tratadas.
+3. **`par_oferta` e `alternativa`** (§12) como serviço.
+4. **Mapa do descompasso** com dado real e as linhas de alternativa.
+5. **Dois números na tela**: "74,7% da fila tem vaga equivalente a menos de 2 km"
+   e "16.345 posições, 7.851 crianças".
+
+### P1 — o que transforma demo em produto (13h00–15h00)
+
+6. **Motor de alocação por criança** (§7.1) rodando sobre 2025, com o
+   comparativo lado a lado contra a alocação por opção. **Se só uma coisa do P1
+   couber, é esta.**
+7. **Painel de convocação** com tempo em status, risco de contato frio e
+   alternativa próxima.
+8. **Claude** na explicação da posição e no rascunho da convocação, com o
+   contrato de "nenhum número vem do modelo".
+
+### P2 — só se sobrar tempo (15h00–15h45)
+
+9. Microáreas SME/IPP como camada e filtro do mapa (shapefile; sem geopandas —
+   `ST_Read` do DuckDB spatial ou conversão prévia para GeoJSON).
+10. Autoconfirmação do critério "aguardou na fila no ano anterior" pela própria
+    base do IC — **7.860 inscrições corrigíveis em 2025**: 5.605 que declararam e
+    não foram confirmadas, e 2.255 que declararam "não" tendo direito. Não
+    depende de integração nova e não colide com o que o RMI já faz (§6).
+11. Nascidos vivos e `totalalunoscreche` como camadas de demanda e ocupação.
+
+### 15h45–16h30 — congelar
+
+12. README com **nome da equipe, membros, resumo, arquitetura, como Claude foi
+    usado para construir e como atua dentro da aplicação, links e vídeo de 60s**.
+    Conteúdo **obrigatório** pelas regras; README fraco custa nota em duas
+    rubricas.
+13. Vídeo de 60s (obrigatório se a aplicação não estiver publicamente acessível).
+14. Ensaiar os 6 minutos. **O corte é duro.** Roteiro: a dor nas palavras deles —
+    *"mais de uma semana para colocar uma criança em uma vaga"* (1 min) → o mapa
+    ao vivo, 1,1 km (1,5 min) → a fila 2× e a alocação por criança rodando
+    (2 min) → honestidade sobre hoje vs. próximos passos (1 min) → fecho (30 s).
+15. Enviar o link para **eventos@taicor.ai** com o número do grupo no assunto e
+    no corpo. **Antes das 16h30.**
+
+---
+
+## 9. O que sobrevive do projeto anterior
+
+O projeto anterior ("Pulso da Rede") mirava gestão pedagógica. **Esse domínio
+inteiro está morto.**
+
+### Aproveitar
+
+| ativo | onde | por quê |
 |---|---|---|
-| **Hoje** | `/hoje` | folha de abertura: linha de estado, 4 situações ranqueadas, decomposição da aula entregue no nível da rede, trilha de agentes |
-| **Comparar** | `/comparar` | matriz CRE × indicador, expansível até escola; troca entre `/network/snapshot` e agregação local, declarando qual |
-| **Recomposição** | `/recomposicao` | matriz habilidades × (CRE / escola / turma), com supressão por célula |
-| **Fluxo** | `/fluxo` | três blocos: saldo de matrícula com saída interna vs externa, carência × aula cancelada, e o corte por ano com a quebra do 6º |
-| **Mapa** | `/mapa` | 1.588 unidades reais, Mercator com pan/zoom, filtro por tipo, busca, card com contexto |
-| **Escola 360** | `/escola/:id` | painel que sempre abre; identidade real, links de mapa, cobertura, comparação, aula entregue, plano de ação |
-| **Unidade** | `/unidade` | visão de dores consolidadas, serve ao diretor e à SME |
-| **Professor** | `/professor` | preview de conceito, nada implementado, limites explícitos |
-| **Dados** | `/dados` | prontidão, perfil de colunas, portões, capacidades declaradas |
+| **Tela do mapa** | `frontend/src/screens/mapa/MapCanvas.tsx`, `domain/projection.ts`, `domain/rio-geometry.ts` | projeção, contorno real do município (IBGE malhas v3, município 3304557), pan/zoom por ponteiro, `<circle>` por unidade. Troca-se o que alimenta os pontos, não o desenho |
+| Kit de interface | `frontend/src/components/ui/*`, `components/shell/*` | primitivos genéricos; defensáveis como biblioteca |
+| Adaptador DuckDB | `backend/app/data_access/duckdb_adapter.py` | genérico |
+| Contratos de capability e proveniência | `backend/app/contracts/*`, `app/platform/*` | declarar origem e bloquear leitura sem cobertura vale **mais** aqui do que antes |
+| Disciplina de dados | `data/README.md`, `.gitignore` | o `dadoscreche` tem dado de criança, mesmo anonimizado. Nunca versionar |
 
-**Copiloto** (`⌘K`) — resolve evidências no snapshot, chama `/ai/briefings`,
-mostra resposta, guardrails e `provider · model · role · políticas`. Cai para
-resposta determinística local quando a IA não pode responder, **declarando o
-motivo**.
+O mapa alimentava-se de 1.588 escolas do Data.Rio. Agora se alimenta das **1.941
+unidades do xlsx da SME** (852 das 872 com fila, geolocalizadas). Mesma tela,
+conteúdo mais forte: a cor deixa de ser indicador sintético e passa a ser **fila e
+ociosidade medidas em dado real**.
 
-**Papéis** (`src/roles.tsx`): Secretaria (completo) · Escola (parcial) ·
-Professor (preview) · Família (fora de escopo, desabilitado com motivo).
-Mapeiam para as roles do backend: `central_manager`, `school_manager`, `teacher`,
-`guardian`.
+### Descartar
 
-### 5.3 Sistema visual
+Censo INEP e a ponte de código INEP. Telas `Escola`, `Professor`, `Recomposicao`,
+`Fluxo`, `Comparar`, `Hoje`. Métricas de frequência, desempenho, carência e
+movimentação. Todos os geradores de dado sintético. Os módulos `analytics`,
+`metrics`, `quality` no formato atual.
 
-**Cor de dado significa uma coisa só: atenção.** Não há cor de marca, gradiente
-nem azul de link. Botão é tinta, link é sublinhado. O acento petróleo
-(`#16505f`) é reservado para IA, ação e foco — nunca para dado.
+### Documentos obsoletos
 
-**Rampa de atenção**, matiz único com claridade monotônica, validada nos dois
-modos: `#cb8f6c` → `#b25c31` → `#8e2c1b`. Verde-amarelo-vermelho foi rejeitado:
-o par âmbar↔vermelho reprova no piso de separação até para visão normal, e
-verde↔vermelho desaba sob deuteranopia.
-
-**Sem leitura** não tem matiz: hachura a 45° sobre cinza. Lê como "fora da
-medição" em impressão, em daltonismo e em alto contraste. É o estado mais
-importante do produto.
-
-Tipografia: **Schibsted Grotesk** (interface e display) + **IBM Plex Mono**
-(códigos, coberturas, hashes). Mono marca visualmente tudo que é rastreável.
+Ficam como histórico, mas **não descrevem mais o projeto**:
+`docs/product/vision.md`, `capabilities.md`, `regras-de-negocio.md`,
+`premissas.md`, `personas-e-jornadas.md`, `roteiro-demo.md`,
+`correcao-rota-backend-impact-lab-2026-08-30.md`,
+`implementation-shot-data-ai-strategy.md`, todos os `docs/api/*handoff*`,
+`docs/data/school-identity-release-contract.md`, e os três relatórios de pesquisa
+na raiz. `docs/architecture/*` segue válido em princípio, desatualizado em
+conteúdo.
 
 ---
 
-## 6. Regras invioláveis
+## 10. Perguntas para a SME, nesta ordem
 
-Vêm de `docs/product/regras-de-negocio.md` e
-`docs/architecture/privacy-and-safety.md`. Não são preferência de design.
+Os mentores estão na sala. Cada resposta muda o produto.
 
-1. **Número vem de código determinístico.** O LLM interpreta, prioriza e escreve;
-   nunca calcula nem corrige valor.
-2. **Ausência não é zero.** Valor ausente é `BLOCKED`, sem período e sem
-   evidência. Nunca exiba 0 no lugar.
-3. **Cobertura manda.** Abaixo de 100% exige limitação; abaixo de 80% degrada;
-   abaixo de 50% bloqueia a leitura.
-4. **Coexistência não é causalidade.** Se dois movimentos coincidem no tempo, o
-   texto diz "coincide com", nunca "causou".
-5. **Sem ranking de escola, turma ou professor.** Use pares comparáveis com
-   critério visível.
-6. **Sem score único de qualidade.** Os componentes permanecem visíveis; um score
-   não pode esconder cobertura insuficiente.
-7. **Supressão de grupo pequeno**, por célula. Turma acima do limiar pode ter
-   descritor abaixo.
-8. **Nenhum dado de aluno** persiste, aparece em tela ou vai ao modelo: nome,
-   CPF, NIS, filiação, endereço, coordenada residencial.
-9. **`raca_cor` é sensível pela LGPD** — só agregado, com supressão, e apenas se
-   o briefing autorizar recorte de equidade.
-10. **Ação administrativa e comunicação externa exigem aprovação humana
-    registrada.** Nada é executado automaticamente.
-11. **Sem match fuzzy por nome de escola ou bairro.** Medido: 0 de 1.519 acertos.
-12. **Dado sintético nunca é descrito como real.** Selo permanente, sem opção de
-    fechar.
-
-### Aplicabilidade por tipo de unidade
-
-**Creche, EDI e CDEI não têm IDEB** e não participam da ADR. A matriz de
-recomposição cobre apenas Escola Municipal, CIEP e Cívico-Militar — as demais
-ficam fora **por inaplicabilidade, não por ausência de dado**, e a tela diz isso.
-Atribuir acerto em Português a uma creche é o erro que um avaliador da SME
-identifica em dois segundos.
-
-A regra vive em **`frontend/src/domain/units.ts`** — um lugar só. `takesAdr`,
-`isFundamental` e `isEarlyChildhood` são consumidos pelo gerador de sintéticos,
-pelo mapa, pela Escola 360, pela Recomposição e pelo Fluxo. Duplicá-la foi
-exatamente como a proficiência voltou a aparecer em biblioteca.
-
-**`NÃO SE APLICA` e `SEM LEITURA` são estados diferentes e a tela nunca os
-soma.** Os dois aparecem vazios; significam o oposto. "Não se aplica" é fato
-consumado: o dado não deveria existir. "Sem leitura" é lacuna: deveria ter
-chegado e não chegou — e só essa é cobrável de alguém.
-
-O contrato marca a diferença por proveniência: `source_kind =
-KNOWN_UNAVAILABLE` para inaplicável, `SYNTHETIC_*` com cobertura baixa para
-lacuna. `isNotApplicable()` em `domain/indicators.ts` é a única leitura desse
-estado, e a agregação de rede tira as inaplicáveis do denominador.
-
-No mapa, com Desempenho ativo: **598 sem sinal · 247 baixa · 64 atenção · 6
-crítico · 98 sem leitura · 575 não se aplica**, somando as 1.588. As 575 são
-EDIs, creches, bibliotecas, núcleos de arte, clubes escolares, CEJAs e a escola
-especial. Antes desta correção elas recebiam proficiência sintética como
-qualquer escola — o mapa inteiro dizia que biblioteca tem nota de ADR.
+1. **Qual campo recebe o retorno da validação do Data Lake/RMI?** Se é
+   `resp_confirmado`, §5.4 é um achado grave; se é outro, é artefato de extração.
+   **É a pergunta mais importante do dia.**
+2. **A capacidade por unidade × grupamento × turno existe em algum lugar como
+   número?** Sem ela o motor de alocação usa confirmados como proxy — funciona
+   para a demo, não para produção.
+3. Há base legal para oferecer à família uma unidade equivalente próxima que não
+   estava entre as 5 opções — sem acionar a penalidade de perda das demais filas?
+4. Existe registro de data/hora da mudança de status da opção? Se existir em
+   algum log, o painel de convocação fica muito mais forte.
+5. A CRE pode remanejar oferta entre unidades depois da parametrização, ou a
+   definição de vagas congela no planejamento?
+6. Trocar classificação por opção por classificação por CPF exige mudança
+   normativa, ou é decisão de parametrização do sistema?
 
 ---
 
-## 7. Decisões tomadas e por quê
+## 11. Como rodar
 
-**O mapa não é o produto; a comparação é.** Um gestor com 1.560 escolas não tem
-problema de localização, tem problema de alocação de atenção. O mapa serve para
-achar uma unidade cujo nome não se lembra e recortar uma CRE — depois sai da
-frente.
-
-**Recusamos o chat lateral como experiência principal.** Um gestor de rede não
-sabe qual pergunta fazer; se soubesse, não precisaria do produto. O Copiloto
-existe, mas o produto entrega trabalho pronto para revisão.
-
-**Identidade real convive com indicador sintético.** O contrato separa
-`identity.source_kind` de `metric.source_kind`, então as duas origens aparecem no
-mesmo objeto sem se confundirem. O selo do topo mostra as duas.
-
-**Unidade real sempre abre.** Quando não há métrica para o identificador, o
-backend devolve `IDENTITY_ONLY` com identidade e coordenada reais. Nunca "escola
-não encontrada": a escola existe; o que falta é cobertura.
-
-**A cor da matriz é relativa, não absoluta.** A dificuldade varia muito entre
-descritores. Se a rede inteira acerta 28% em frações, é lacuna de currículo, não
-de escola — e pintar tudo de vermelho esconde a turma que está pior que suas
-pares. A cor é a distância para a média da rede no mesmo descritor; a linha
-"média do recorte" mostra a fragilidade absoluta.
-
-**Aula sem lançamento recebe hachura, não cor.** É ausência de informação — não
-sabemos se aconteceu. Cancelada e ausente pedem atenção e recebem a rampa.
-
-**Coerência de origem.** Quando a tela lê fixture, o Copiloto usa o caminho
-determinístico e explica por quê — senão narraria uma população diferente da que
-está na tela.
-
----
-
-## 8. Próximos passos
-
-### P0 — antes do briefing
-
-1. **Hoje deixa de ser fixture.** As quatro situações da abertura são hardcoded.
-   Com `/network/signals` — ou derivadas do cruzamento em `pipeline.ts` — a tela
-   mais visível da demo deixa de ser maquete. É o maior retorno por hora.
-2. **Bloco de turmas na Escola 360.** A camada de dados existe (`getTurmas`, com
-   caminho governado e fallback); falta a tela.
-3. **Fechar o ciclo.** Salvar plano de ação numa pauta, atribuir responsável e
-   prazo, marcar status, mostrar trilha. As tabelas do SQLite já existem.
-4. **Ensaiar a demo** de ponta a ponta, incluindo desligar a API para provar o
-   fallback determinístico.
-
-### P1 — depende do backend
-
-4. **`subject_grade_mean`** em escala 0–10 para o caso COC. Sem ele, nota de
-   disciplina teria que ser espremida em `skill_mastery_rate`, que é razão.
-5. **`lessons_cancelled_rate` e `lessons_unlogged_rate`** além do
-   `lessons_delivered_rate`. Sem os três, a distinção não sobrevive à agregação.
-6. **`proficiency_level` com os quatro padrões oficiais** de `dc_padrao`.
-7. **`vl_proficiencia_erro` exposto** — diferença dentro da margem de erro não é
-   diferença, e a tela precisa poder suprimir comparação não significativa.
-8. **Release INEP por `CO_ENTIDADE`.** Enquanto não existir, todo painel de
-   escola fica em `IDENTITY_ONLY`. Se o briefing entregar a tabela `escola` do
-   pipeline, o cruzamento vem pronto — ela tem `id_inep` e `id_designacao` na
-   mesma linha.
-
-### P2 — só se o briefing puxar
-
-9. Rollup governado de habilidades por rede e por CRE (hoje derivado no cliente).
-10. Adapter temático do domínio confirmado no briefing.
-
-### Explicitamente fora
-
-Análise territorial de vazio de creche — a notícia da multa é de 2024 e creche
-não aparece na comunicação da SME entre maio e agosto de 2026. Papel Família —
-exige base legal, canal e consentimento que não temos.
-
----
-
-## 9. Perguntas para os primeiros 30 minutos
-
-Anotadas antes, para não improvisar às 9h05:
-
-1. Quais são os critérios de julgamento e seus pesos? Qual o tempo de pitch?
-2. O dataset traz itens e habilidades dos simulados, ou apenas nota agregada?
-3. A frequência é diária, por aula ou acumulada? Traz `id_situacao`?
-4. O alvo primário é professor, direção, CRE ou nível central?
-5. Podemos usar dado externo — INEP, data.rio, Fogo Cruzado?
-6. Há acesso a BigQuery ou MCP da Prefeitura?
-7. O que pode aparecer em tela, do ponto de vista de LGPD?
-8. Há identificador longitudinal anonimizado?
-9. Quais intervenções já são registradas, permitindo avaliar efeito?
-10. Qual o formato exato da submissão?
-
----
-
-## 10. Como rodar
-
-**Backend**, com o cadastro real:
+Backend (DuckDB já instalado; **sem pandas/numpy**):
 
 ```powershell
-cd C:\Users\lucas\documents\claude-educacao\backend
-uv run python -m scripts.import_official_school_identity   # publica a release
-$env:PULSO_MOCK_DATA_ENABLED='false'
+Set-Location C:\Users\lucas\documents\claude-educacao\backend
+uv sync
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-**Frontend**, em outro terminal:
+Frontend:
 
 ```powershell
-cd C:\Users\lucas\documents\claude-educacao\frontend
+Set-Location C:\Users\lucas\documents\claude-educacao\frontend
 npm install
-npm run dev                                                # http://localhost:5173
+npm run dev
 ```
 
-`VITE_API_BASE` padrão `http://127.0.0.1:8000`. `VITE_API_MODE` = `auto`
-(padrão), `live` ou `fixture`.
-
-**Gates:**
+Dados — clonar **fora** do repositório e apontar por variável de ambiente:
 
 ```powershell
-cd backend
-uv run ruff check app tests scripts
-uv run mypy app scripts
-uv run python -m pytest -q
-
-cd ..\frontend
-npx tsc -b
-npm run build
-npm run lint
+git clone https://github.com/CIT-SME-RJ/dadoscreche
 ```
+
+Gates antes de qualquer commit:
+
+```powershell
+Set-Location backend
+uv run ruff check app tests scripts; uv run mypy app scripts; uv run python -m pytest -q
+Set-Location ..\frontend
+npx tsc -b; npm run build; npm run lint
+```
+
+**Política Git inalterada:** não há commit, push ou `git add` automático. Antes do
+commit, revisar `git diff --cached --name-only` e confirmar que nenhum arquivo do
+`dadoscreche` entrou.
 
 ---
 
-## 11. Armadilhas conhecidas
+## 12. Consultas de referência
 
-**Porta 8000 presa.** Se `/context` ou `/turmas` derem 404, provavelmente há um
-uvicorn antigo segurando a porta e o novo falhou no bind em silêncio. Mate o
-processo antes de investigar o código.
+Padrão de leitura:
 
-**UTF-8 no `curl` do Git Bash.** Acento no corpo de um POST vira 400. Não é bug
-do backend — o shell corrompe os bytes. Teste com arquivo gerado em UTF-8.
-
-**Encoding das fontes públicas.** Censo Escolar e INEP são latin-1 com `;`.
-data.rio CSV é UTF-8 com BOM. ArcGIS `f=json` vem com mojibake — use o CSV.
-
-**Nunca joine por nome de bairro.** O `NO_BAIRRO` do Censo tem 238 valores
-distintos contra 162 bairros oficiais; 5% não casam. Use point-in-polygon.
-
-**Códigos de município divergem.** INEP e IBGE usam `3304557`; SIOPE usa
-`330455`.
-
-**Render pesado no mapa.** 1.588 pontos SVG com transição CSS simultânea travam
-o navegador ao trocar filtro. As transições por ponto foram removidas por isso.
-
-**N+1 em agregação.** Chamar uma função que faz `getSchoolMap()` dentro de um
-laço recompõe 1.588 escolas por iteração. Leia o mapa uma vez e agregue.
-
----
-
-## 12. Onde está cada coisa
-
-```text
-docs/
-  ESTADO-DO-PROJETO.md                          ← este arquivo
-  api/frontend-handoff.md                       contrato backend↔frontend
-  api/frontend-agent-school-context-handoff.md  painel da escola e plano de ação
-  api/backend-agent-turma-grain-handoff.md      grão de turma + 2 adendos de schema
-  api/backend-agent-sme-pipeline-synthetic-handoff.md  sintéticos nos schemas da SME
-  product/vision.md · capabilities.md · regras-de-negocio.md · premissas.md
-  product/correcao-rota-backend-impact-lab-2026-08-30.md
-  architecture/overview.md · privacy-and-safety.md · agent-runtime.md
-  data/school-identity-release-contract.md
-
-relatorio-claude-impact-lab-rio-educacao-2026-08-30.md   pesquisa de preparação
-pesquisa_agenda_recente_sme_rio_e_hipoteses_hackathon.md agenda da SME e hipóteses
-hackathon_sme_rio_fontes_e_gaps.md                       fontes de dados e gaps
-
-backend/app/   analytics · ai · schools · intake · mapping · data_access · strategy
-frontend/src/  screens · api · domain · components
-               api/pipeline.ts  sintéticos nos schemas da SME (fluxo, carência, ano)
-               api/turmas.ts    grão de turma, habilidades e aula entregue
+```python
+import duckdb
+c = duckdb.connect()
+c.execute("""CREATE VIEW a AS SELECT * FROM read_csv_auto(
+  '<...>/01_QueryA_InscricoesPorAno.csv.gz', delim=';', header=true)""")
 ```
 
-**Política Git:** nenhum commit, push ou `git add` é automático. A decisão é do
-mantenedor. Nunca versione dado pessoal, upload, banco local, segredo ou payload
-de modelo — e revise `git diff --cached --name-only` antes do primeiro commit.
+**A inflação da fila** (§5.2) — o número mais fácil de mostrar e o mais difícil de
+contestar:
+
+```sql
+SELECT ano, count(*) AS posicoes, count(DISTINCT aluno_anon) AS criancas,
+       round(1.0 * count(*) / count(DISTINCT aluno_anon), 2) AS inflacao
+FROM a WHERE situacao = 'Lista de espera' GROUP BY 1 ORDER BY 1;
+```
+
+**O par com fila e a alternativa mais próxima** (§5.3) — sustenta a tese do mapa:
+
+```sql
+CREATE TABLE ugt AS
+SELECT a.unidade, a.grupamento, a.horario,
+       sum(CASE WHEN a.situacao = 'Lista de espera' THEN 1 ELSE 0 END) AS espera,
+       sum(CASE WHEN a.situacao = 'Confirmado'      THEN 1 ELSE 0 END) AS conf,
+       max(l.lat) AS lat, max(l.lon) AS lon, max(l.cre) AS cre
+FROM a JOIN loc l ON l.cod = ltrim(a.unidade, '0')
+WHERE a.ano = 2025 AND l.lat IS NOT NULL
+GROUP BY 1, 2, 3;
+
+WITH com AS (SELECT * FROM ugt WHERE espera >= 10),
+     sem AS (SELECT * FROM ugt WHERE espera = 0 AND conf > 0)
+SELECT round(median(dmin), 2)                                           AS mediana_km,
+       round(100.0 * avg(CASE WHEN dmin <= 2 THEN 1.0 ELSE 0.0 END), 1) AS pct_ate_2km,
+       sum(espera)                                                      AS posicoes_em_espera
+FROM (
+  SELECT com.*, (
+    SELECT min(111.19 * sqrt(pow(com.lat - s.lat, 2)
+                           + pow((com.lon - s.lon) * cos(radians(com.lat)), 2)))
+    FROM sem s
+    WHERE s.grupamento = com.grupamento AND s.horario = com.horario
+  ) AS dmin
+  FROM com
+);
+```
+
+`loc` vem do xlsx de localização, com `cod = ltrim(DESIGNACAO, '0')`. A distância
+é aproximação equirretangular — suficiente para 2 km na latitude do Rio, e
+declarada como aproximação na interface.
+
+**Entrada do motor de alocação** (§7.1): preferência por criança, prioridade por
+inscrição e capacidade por par.
+
+```sql
+-- prioridade: pontos declarados e confirmados, pela régua do ano
+CREATE TABLE pontos AS
+SELECT b.ano, b.prm_id, b.plm_id, b.ipl_id,
+       sum(CASE WHEN b.resposta = 'Sim' THEN qc.perg_pontuacao ELSE 0 END) AS pts_decl,
+       sum(CASE WHEN b.resposta = 'Sim' AND b.confirmado = 'Sim'
+                THEN qc.perg_pontuacao ELSE 0 END)                          AS pts_conf
+FROM b JOIN qc ON qc.ano = b.ano AND qc.ich_perg_id = b.ich_perg_id
+GROUP BY 1, 2, 3, 4;
+```
+
+Preferência = `(aluno_anon, opcao, unidade, grupamento, horario)` da Query A.
+Capacidade = confirmados por par em `ugt`, ou a planilha `totalalunoscreche` do
+ano. Desempate: os critérios com `perg_criterio = 'Sim'` (pontuação zero) e, em
+seguida, `data_criacao`.
+
+**Autoconfirmação do critério de fila do ano anterior** (P2, item 10):
+
+```sql
+CREATE TABLE fato AS
+SELECT DISTINCT aluno_anon FROM a
+WHERE ano = 2024 AND situacao = 'Lista de espera'
+  AND aluno_anon NOT IN (SELECT aluno_anon FROM a WHERE ano = 2024 AND situacao = 'Confirmado');
+```
+
+Cruzar `fato` com a resposta de `perg_id = 27` em 2025, juntando B↔C por
+`ich_perg_id` e B↔A por `(prm_id, plm_id, ipl_id)`.

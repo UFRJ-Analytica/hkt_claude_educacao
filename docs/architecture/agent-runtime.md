@@ -35,4 +35,4 @@ Persistir sem PII: run id, agente/versão, gatilho, objetivo, escopo, versões d
 
 Capability ausente → `WAITING_FOR_DATA` ou falha tipada. Qualidade insuficiente → saída degradada ou bloqueada. Provider indisponível → fallback explícito, nunca resposta fabricada. Violação de privacidade → bloquear antes do envio e registrar apenas evento sanitizado.
 
-Veja [regras de negócio](../product/regras-de-negocio.md), [proveniência](data-provenance.md) e [privacidade](privacy-and-safety.md).
+Veja regras de negócio, [proveniência](data-provenance.md) e [privacidade](privacy-and-safety.md).

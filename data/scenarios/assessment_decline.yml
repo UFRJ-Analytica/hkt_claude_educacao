@@ -1,8 +1,0 @@
-version: 1.0.0
-privacy_classification: AGGREGATE_NO_PII
-id: assessment_decline
-label: Queda de avaliação
-narrative: Pontuações sintéticas em queda; associação temporal não implica causalidade.
-seed: 20260828
-parameters: {attendance_trend: 0.0, assessment_trend: -1.5, capacity_pressure: 0.0, shortage_factor: 1.0, quality_gap: 0.0}
-expected_signals: [assessment_down]

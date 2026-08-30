@@ -39,4 +39,4 @@ Carga ou schema novo não substitui silenciosamente a versão anterior. Registra
 contagem, SHA256 e classificação por arquivo. DuckDB recebe somente assets, medidas e operações
 allowlisted; SQLite persiste apenas controle agregado sem PII, com WAL, FKs e transações.
 
-Veja [política de dados](../../data/README.md), [capacidades](../product/capabilities.md) e [privacidade](privacy-and-safety.md).
+Veja [política de dados](../../data/README.md), capacidades e [privacidade](privacy-and-safety.md).

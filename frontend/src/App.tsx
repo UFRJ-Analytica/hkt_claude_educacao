@@ -1,101 +1,81 @@
-import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Navigate, Route, Routes } from 'react-router-dom';
-import { getCapabilities, getSchoolMap, mapOrigin } from './api/client';
-import type { Capability } from './api/types';
-import Hoje from './screens/Hoje';
-import Comparar from './screens/Comparar';
-import Mapa from './screens/Mapa';
-import Escola from './screens/Escola';
-import Unidade from './screens/Unidade';
-import Professor from './screens/Professor';
-import Recomposicao from './screens/Recomposicao';
-import Fluxo from './screens/Fluxo';
-import Dados from './screens/Dados';
-import Copiloto from './Copiloto';
-import { useRole } from './roles';
-import { CapabilityState, Loading } from './components';
-import { DemoBar, TopNav } from '@/components/shell';
+import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { apiBase, getCapabilities } from './api/client';
+import { CapabilityState, Loading, Offline } from './components';
+import { ROLES, useRole } from './roles';
 
-function isUsable(cap: Capability | undefined) {
-  return cap ? ['AVAILABLE', 'MOCK_ONLY', 'DEGRADED'].includes(cap.status) : false;
-}
-
-/** Capacidades que produzem INDICADOR (distintas do cadastro de escolas). */
-const INDICATOR_CAPS = ['network', 'learning', 'attendance', 'capacity', 'staffing'];
-
+/**
+ * A casca.
+ *
+ * Cada role tem as suas rotas e elas não se cruzam: o responsável nunca vê a
+ * fila da CRE, o gestor nunca vê o formulário da família. Enquanto uma tela não
+ * existe, a rota devolve o estado declarado pela capacidade — que hoje é
+ * SCHEMA_ONLY para todas, porque o extrato da SME ainda não está conectado.
+ */
 export default function App() {
-  const caps = useQuery({ queryKey: ['capabilities'], queryFn: getCapabilities });
-  const map = useQuery({ queryKey: ['map'], queryFn: getSchoolMap });
-  const { role } = useRole();
-  const [copilot, setCopilot] = useState(false);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setCopilot((v) => !v);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  const caps = useQuery({ queryKey: ['capabilities'], queryFn: getCapabilities, retry: false });
+  const { role, setRole } = useRole();
 
   const byId = new Map((caps.data ?? []).map((c) => [c.id, c]));
-  const origin = map.data ? mapOrigin() : { mode: 'fixture' as const, note: 'carregando', geoReal: false };
-  const live = origin.mode === 'live';
-
-  // O cadastro oficial sozinho já sustenta mapa e drill-down de identidade,
-  // mesmo com todas as capacidades de indicador em SCHEMA_ONLY.
-  const registryReal = byId.get('school-identity')?.status === 'AVAILABLE';
-  const schoolsUsable = isUsable(byId.get('schools')) || registryReal;
-  const anyIndicator = INDICATOR_CAPS.some((id) => isUsable(byId.get(id)));
-
-  const visible = role.routes.filter((r) => byId.get(r.capability ?? '')?.status !== 'DISABLED');
 
   return (
     <div className="shell">
-      <TopNav
-        geoReal={origin.geoReal}
-        links={visible}
-        live={live}
-        note={origin.note}
-        onOpenCopilot={() => setCopilot(true)}
-        snapshot={map.data ? map.data.snapshot_id.slice(0, 8) : null}
-      />
+      <nav className="nav">
+        <span className="wordmark">
+          <i />
+          Vaga Certa
+        </span>
 
-      {!anyIndicator && map.data && <DemoBar registryReal={registryReal} />}
+        <div className="roleswitch" role="group" aria-label="Papel">
+          {ROLES.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              className={role.id === r.id ? 'on' : ''}
+              title={`${r.scope} — ${r.note}`}
+              onClick={() => setRole(r.id)}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="navlinks">
+          {role.routes.map((r) => (
+            <NavLink key={r.path} to={r.path} className={({ isActive }) => (isActive ? 'cur' : '')}>
+              {r.label}
+            </NavLink>
+          ))}
+        </div>
+
+        <div className="navr">
+          <span className="seal" title="Extrato anonimizado da SME-Rio, processos 2021–2025">
+            <i />
+            SME · 2021–2025
+          </span>
+        </div>
+      </nav>
 
       <main className="page">
-        {caps.isLoading || map.isLoading ? (
+        {caps.isLoading ? (
           <Loading label="resolvendo capacidades" />
+        ) : caps.isError ? (
+          <Offline base={apiBase()} />
         ) : (
           <Routes>
-            <Route path="/" element={<Navigate to={role.routes[0]?.path ?? '/hoje'} replace />} />
+            <Route path="/" element={<Navigate to={role.routes[0].path} replace />} />
             <Route
-              path="/hoje"
-              element={schoolsUsable ? <Hoje /> : <CapabilityState capability={byId.get('network')} screen="hoje" />}
+              path="/inscricao"
+              element={<CapabilityState capability={byId.get('inscricao')} screen="inscrição" />}
             />
             <Route
-              path="/comparar"
-              element={schoolsUsable ? <Comparar /> : <CapabilityState capability={byId.get('schools')} screen="comparar" />}
+              path="/gestor"
+              element={<CapabilityState capability={byId.get('fila')} screen="painel do gestor" />}
             />
-            <Route
-              path="/mapa"
-              element={schoolsUsable ? <Mapa /> : <CapabilityState capability={byId.get('schools')} screen="mapa" />}
-            />
-            <Route path="/recomposicao" element={schoolsUsable ? <Recomposicao /> : <CapabilityState capability={byId.get('learning')} screen="recomposicao" />} />
-            <Route path="/fluxo" element={schoolsUsable ? <Fluxo /> : <CapabilityState capability={byId.get('network')} screen="fluxo" />} />
-            <Route path="/unidade" element={<Unidade />} />
-            <Route path="/escola/:id" element={<Escola />} />
-            <Route path="/professor" element={<Professor />} />
-            <Route path="/dados" element={<Dados />} />
             <Route path="*" element={<CapabilityState screen="rota desconhecida" />} />
           </Routes>
         )}
       </main>
-
-      {copilot && <Copiloto onClose={() => setCopilot(false)} />}
     </div>
   );
 }
