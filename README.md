@@ -120,6 +120,29 @@ cd backend && uv run ruff check app tests scripts && uv run mypy app scripts && 
 cd frontend && npx tsc -b && npm run build && npm run lint
 ```
 
+## Demonstração
+
+Dois vídeos (gravados em modo mock, dados sintéticos/anonimizados) mostram as
+duas superfícies alteradas pela integração com o BigQuery:
+
+### 1. Tela de unidades — 352 creches reais do BigQuery, classificadas por risco
+<video src="docs/media/01-unidades-risco.webm" width="720" controls></video>
+- 352 unidades servidas a partir da integração (antes: 40 por teto; agora: toda a
+  rede do BigQuery)
+- tag **risco alto / risco baixo** no card de cada creche, calculada pelo modelo
+  `modelo_risco_alocacao_xgb` (XGBoost) treinado com a feature *frequência de
+  inscrições por unidade*
+- risco sobe com mais demanda, desce com menos (alta frequência → mais difícil
+  alocar; baixa frequência → maior chance de vaga)
+
+### 2. Tela Acompanhar — aviso de risco na 1ª opção da inscrição
+<video src="docs/media/02-acompanhar-risco.webm" width="720" controls></video>
+- aviso binário (sem nota na UI) sobre a escola da primeira opção
+- risco baixo → "Boa perspectiva" / risco alto → "Aviso de risco"
+- fonte, data e limitações listadas na legenda; dados derivados de sintético
+
+> Os vídeos foram capturados sem PII. Veja [política de dados](data/README.md).
+
 ## Documentação
 
 - [Estado do projeto](docs/ESTADO-DO-PROJETO.md) — o processo real e o que o dado sustenta
