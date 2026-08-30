@@ -43,18 +43,14 @@ class Settings(BaseSettings):
         frozen=True,
     )
 
-    service_name: str = "pulso-da-rede-api"
+    service_name: str = "vaga-certa-api"
     version: str = "0.1.0"
     environment: str = "local"
-    mock_data_enabled: bool = False
     ai_provider: Literal["fake", "anthropic"] = "fake"
     anthropic_api_key: str | None = None
-    intake_root: Path = Path(".intake")
-    intake_catalog_path: Path = Path(".control/intake_catalog.sqlite3")
-    intake_max_bytes: int = Field(default=10_000_000, gt=0)
-    intake_max_descriptors: int = Field(default=1_000, gt=0)
-    intake_max_joins_per_dataset: int = Field(default=100, gt=0)
-    intake_max_audits_per_join: int = Field(default=1_000, gt=0)
+    # Raiz do extrato da SME (github.com/CIT-SME-RJ/dadoscreche), clonado fora
+    # do repositório. Nenhum arquivo dele é versionado.
+    dadoscreche_root: Path = Path("../dadoscreche")
     cors_origins: CsvTuple = Field(
         default_factory=lambda: (
             "http://localhost:3000",
@@ -63,9 +59,7 @@ class Settings(BaseSettings):
             "http://127.0.0.1:5174",
         )
     )
-    disabled_modules: CsvFrozenSet = Field(
-        default_factory=lambda: frozenset({"equity", "interventions"})
-    )
+    disabled_modules: CsvFrozenSet = Field(default_factory=frozenset)
 
     @field_validator("cors_origins")
     @classmethod

@@ -1,8 +1,0 @@
-version: 1.0.0
-privacy_classification: AGGREGATE_NO_PII
-id: network_improving
-label: Rede em melhora
-narrative: Sinais sintéticos simultâneos de melhora, apresentados como correlação e não causalidade.
-seed: 20260826
-parameters: {attendance_trend: 0.004, assessment_trend: 0.8, capacity_pressure: 0.0, shortage_factor: 0.7, quality_gap: 0.0}
-expected_signals: [attendance_up, assessment_up, shortage_down]

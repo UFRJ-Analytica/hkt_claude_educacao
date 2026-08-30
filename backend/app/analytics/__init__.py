@@ -1,1 +1,0 @@
-"""Versioned aggregate analytics domain."""

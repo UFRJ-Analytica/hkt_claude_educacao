@@ -35,7 +35,7 @@ Rotas não são habilitadas por build-time assumptions: o frontend consulta `GET
 
 ## Lifecycle de status
 
-Estados são os definidos em [capacidades](../product/capabilities.md). Transição requer reavaliação de fonte, schema, cobertura, configuração e health. `AVAILABLE` não é inferido apenas porque o router responde.
+Estados são os definidos em capacidades. Transição requer reavaliação de fonte, schema, cobertura, configuração e health. `AVAILABLE` não é inferido apenas porque o router responde.
 
 ## Remoção segura
 
@@ -49,4 +49,4 @@ Gate futuro obrigatório: desregistrar um módulo remove routers, capabilities, 
 - OpenAPI será fonte dos tipos frontend;
 - testes de parity verificam backend capability ↔ frontend feature ↔ tool permitida.
 
-Veja [handoff de API](../api/frontend-handoff.md) e [ADR-001](decisions/ADR-001-modular-monolith.md).
+Veja handoff de API e [ADR-001](decisions/ADR-001-modular-monolith.md).
