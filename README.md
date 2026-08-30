@@ -5,6 +5,8 @@ pelo celular vendo a fila de cada creche, a direção da unidade valida e convoc
 com um clique, e a Secretaria enxerga a rede inteira em um mapa. Construído em um
 dia sobre os dados reais dos processos de 2021 a 2025.
 
+**Experimente agora: <https://frontend-production-b2ef0.up.railway.app/>**
+
 Claude Impact Lab Rio #2 · desafio da Secretaria Municipal de Educação do Rio de
 Janeiro · 30/08/2026.
 
