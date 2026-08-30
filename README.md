@@ -71,8 +71,7 @@ alocação.
 
 <img width="2481" height="1248" alt="Screenshot from 2026-08-30 16-25-42" src="https://github.com/user-attachments/assets/8d162c33-84d0-452b-a484-6ceb2bc2f4e8" />
 <img width="2481" height="1248" alt="Screenshot from 2026-08-30 16-25-22" src="https://github.com/user-attachments/assets/6c266fb7-54eb-474c-90be-9248a119a6a6" />
-<img width="2641" height="1325" alt="Screenshot from 2026-08-30 16-12-52" src="https://github.com/user-attachments/assets/09d1df8e-42a7-48af-9b81-06d20977e454" />
-<img width="423" height="196" alt="Screenshot from 2026-08-30 11-53-28" src="https://github.com/user-attachments/assets/13fd0323-9876-4a74-8785-40e0dc52a910" />
+
 
 
 ## No que não abrimos mão
