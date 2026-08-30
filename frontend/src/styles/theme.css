@@ -1,0 +1,204 @@
+/* ============================================================
+   Matrícula Carioca · Creche — sistema visual (Tailwind v4 + coss ui)
+
+   Marca: azul da Prefeitura do Rio (#13335a). É a cor de ação, foco,
+   passo ativo e identidade. Dado (demanda por unidade) usa um semáforo
+   próprio (--demand-*), nunca a marca — para que "azul" sempre signifique
+   "toque aqui" e nunca "atenção".
+   ============================================================ */
+
+:root {
+  color-scheme: light;
+
+  /* ---- marca ---- */
+  --brand: #13335a;
+  --brand-2: #1f4f86;
+  --brand-3: #2f6bb0;
+  --brand-soft: #e8eef6;
+  --brand-soft-2: #d3deed;
+  --brand-ink: #ffffff;
+
+  /* ---- neutros (frios, para casar com o azul) ---- */
+  --canvas: #f2f5f8;
+  --surface: #ffffff;
+  --surface-2: #f7f9fb;
+  --line: #e1e7ee;
+  --line-2: #c9d3de;
+  --line-3: #a3b1c0;
+
+  --ink: #0f1a26;
+  --ink-2: #46556a;
+  --ink-3: #74839a;
+  --ink-4: #a4b0c0;
+
+  /* ---- semáforo de demanda (dado, não marca) ---- */
+  --demand-low: #2f7d5f;
+  --demand-low-soft: #e3f2ea;
+  --demand-mid: #b7791f;
+  --demand-mid-soft: #fbf0d9;
+  --demand-high: #a32d2d;
+  --demand-high-soft: #f9e3e3;
+
+  --ok: #2f7d5f;
+  --ok-soft: #e3f2ea;
+  --warn: #b7791f;
+  --warn-soft: #fbf0d9;
+  --danger: #a32d2d;
+  --danger-soft: #f9e3e3;
+
+  --sh-1: 0 1px 2px rgba(15, 26, 38, 0.05);
+  --sh-2: 0 1px 2px rgba(15, 26, 38, 0.05), 0 4px 12px -4px rgba(15, 26, 38, 0.1);
+  --sh-3: 0 1px 3px rgba(15, 26, 38, 0.07), 0 12px 32px -12px rgba(15, 26, 38, 0.22);
+  --sh-up: 0 -6px 24px -12px rgba(15, 26, 38, 0.25);
+
+  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sans: 'Schibsted Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ease: cubic-bezier(0.22, 0.68, 0.32, 1);
+
+  --topbar-h: 56px;
+  --bottombar-h: 76px;
+  --page-max: 560px;
+  --pad-x: clamp(16px, 4vw, 24px);
+
+  /* ---- contrato do coss ui ---- */
+  --radius: 10px;
+
+  --background: var(--canvas);
+  --foreground: var(--ink);
+
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface);
+  --popover-foreground: var(--ink);
+
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-ink);
+
+  --secondary: var(--brand-soft);
+  --secondary-foreground: var(--brand);
+
+  --muted: var(--surface-2);
+  --muted-foreground: var(--ink-3);
+
+  --accent-surface: var(--brand-soft);
+  --accent-foreground: var(--brand);
+
+  --destructive: var(--danger);
+  --destructive-foreground: var(--danger);
+
+  --success: var(--ok);
+  --success-foreground: var(--ok);
+  --warning: var(--warn);
+  --warning-foreground: var(--warn);
+  --info: var(--brand-2);
+  --info-foreground: var(--brand-2);
+
+  --border: var(--line);
+  --input: var(--line-2);
+  --ring: var(--brand-2);
+
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: var(--brand-ink);
+  --sidebar-accent: var(--brand-soft);
+  --sidebar-accent-foreground: var(--brand);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--brand-2);
+
+  --font-sans: var(--sans);
+  --font-heading: var(--sans);
+  --font-mono: var(--mono);
+}
+
+@theme inline {
+  --font-sans: var(--sans);
+  --font-heading: var(--sans);
+  --font-mono: var(--mono);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent-surface);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* ---- vocabulário do produto ---- */
+  --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
+  --color-brand-3: var(--brand-3);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-soft-2: var(--brand-soft-2);
+  --color-brand-ink: var(--brand-ink);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-line-3: var(--line-3);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-4: var(--ink-4);
+  --color-demand-low: var(--demand-low);
+  --color-demand-low-soft: var(--demand-low-soft);
+  --color-demand-mid: var(--demand-mid);
+  --color-demand-mid-soft: var(--demand-mid-soft);
+  --color-demand-high: var(--demand-high);
+  --color-demand-high-soft: var(--demand-high-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+
+  --shadow-e1: var(--sh-1);
+  --shadow-e2: var(--sh-2);
+  --shadow-e3: var(--sh-3);
+  --shadow-up: var(--sh-up);
+
+  --ease-app: var(--ease);
+  --spacing-topbar: var(--topbar-h);
+  --spacing-bottombar: var(--bottombar-h);
+  --spacing-page: var(--page-max);
+}
+
+/* Light-only por decisão: o cidadão usa o app ao sol, no celular. */
+.dark {
+  color-scheme: light;
+}

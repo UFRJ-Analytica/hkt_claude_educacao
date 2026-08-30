@@ -1,111 +1,110 @@
-# Frontend — Pulso da Rede
+# Matrícula Carioca · Creche — protótipo mobile-first
 
-React 18 + TypeScript + Vite. Consome `/api/v1` do backend FastAPI e cai para
-fixtures locais quando ele não responde.
+App para o responsável inscrever a criança na creche pública do Rio pelo celular,
+de ponta a ponta: dados → prioridade → documentos (pré-análise por IA) → escolha
+de até 5 creches no mapa com demanda visível → código → acompanhamento e
+convocação (aceitar/recusar) com aviso por Pix, WhatsApp e e-mail.
 
-## Executar
+Hackathon Claude · 30/08/2026 · desafio "Inteligência na Inscrição de Creche" (SME-Rio).
+Plano, crítica do fluxo atual e decisões: [`docs/plano_app_creche.md`](../docs/plano_app_creche.md).
 
-```powershell
-Set-Location C:\Users\lucas\documents\claude-educacao\frontend
+## Rodar
+
+```bash
 npm install
-npm run dev          # http://localhost:5173
-npm run build        # tsc -b && vite build
+npm run dev        # http://localhost:5173 (abra no celular pela rede: `--host` já está no script)
+                   # `/` = portal no estilo matricula.rio · `/app` = início do app · `/creche` = painel da unidade (esboço)
+npm run build      # tsc + vite build → dist/
+npm run lint       # oxlint
 ```
 
-O backend precisa das origens CORS já configuradas em `Settings.cors_origins`
-(`http://localhost:5173` está no default). Para subir a API com dados sintéticos:
+`.env` controla a origem dos dados:
 
-```powershell
-Set-Location ..\backend
-$env:PULSO_MOCK_DATA_ENABLED = "true"
-uv run uvicorn app.composition:create_app --factory --port 8077
+| `VITE_API_MODE` | Comportamento |
+| --- | --- |
+| `fixture` | Não chama backend; unidades sintéticas, verificação e pré-análise simuladas |
+| `auto` (padrão) | Consulta `/health` e `/api/v1/capabilities`; só usa dados reais quando `unidades` e `inscricao` estiverem `AVAILABLE` |
+| `live` | Exige o mesmo contrato de capacidades do backend; enquanto ele não estiver disponível, mantém a demonstração identificada na tela |
+
+Em produção, use uma origem HTTPS em `VITE_API_BASE`. O cliente também promove
+automaticamente uma URL `http://` para `https://` no build de produção, evitando
+bloqueio de Mixed Content pelo navegador.
+
+## Railway
+
+O serviço do frontend deve usar `frontend` como **Root Directory** e
+`railway.toml` como **Config File**. Configure:
+
+```env
+VITE_API_MODE=auto
+VITE_API_BASE=https://backend-production-aae8b.up.railway.app
 ```
 
-## Origem dos dados
+No serviço do backend, libere exatamente a origem pública do frontend, sem barra
+no final:
 
-`VITE_API_MODE` controla a resolução, e a origem escolhida aparece na tela
-(selo do topo e rodapé de Hoje):
+```env
+PULSO_CORS_ORIGINS=https://frontend-production-b2ef0.up.railway.app
+```
 
-| valor | comportamento |
-|---|---|
-| `auto` (padrão) | testa `GET /health`; usa a API se responder, senão fixture |
-| `live` | força API; se ela cair, ainda assim degrada para fixture com aviso |
-| `fixture` | ignora a API |
-
-`VITE_API_BASE` aponta a base da API (padrão `http://127.0.0.1:8000`).
-
-## Rede real
-
-Com a release oficial publicada (`uv run python -m scripts.import_official_school_identity`), o
-mapa consome `GET /api/v1/schools/official` e passa a mostrar as **1.588 unidades reais** da rede
-municipal — identidade, designação SME, CRE, tipo de equipamento e coordenada, fonte Data.Rio/SME
-sob CC-BY 4.0.
-
-Os **indicadores continuam sintéticos**, gerados por escola a partir de uma semente estável do
-`school_id`. Cada métrica declara a própria proveniência `SYNTHETIC_*`, o selo do topo mostra
-`REDE REAL · IND. SINTÉTICOS`, e uma faixa fixa avisa que `network`, `learning`, `attendance`,
-`capacity` e `staffing` estão em `SCHEMA_ONLY` na API.
-
-O contorno do município é o limite oficial do IBGE (malhas v3, município 3304557), embutido em
-`src/domain/rio-geometry.ts`. Sem tiles externos: o mapa funciona offline.
-
-O dataset governado atual tem 30 unidades sintéticas — insuficiente para a
-leitura de rede. Quando a API responde com menos de 200 unidades, o cliente usa
-a fixture e **declara isso** nas limitações, em vez de fingir cobertura.
-
-## Painel de contexto da escola
-
-`GET /api/v1/schools/{id}/context` — chamado ao abrir qualquer unidade real.
-
-Regra central: **uma unidade real sempre abre.** Quando não há métrica carregada para o
-identificador, o backend devolve `metric_coverage.status = IDENTITY_ONLY` com identidade, CRE, tipo
-e coordenada reais. A tela mostra os indicadores como *não carregados* (hachura), explica que falta
-o cruzamento por `CO_ENTIDADE`/INEP, e oferece links de Google Maps e rotas. Nunca "escola não
-encontrada".
-
-Com `SYNTHETIC_SNAPSHOT_MATCHED`, a tela também renderiza métricas e a comparação escola · CRE ·
-rede vinda de `comparisons[]`, sempre rotulada como demonstração.
-
-Educação infantil (`Creche`, `EDI`, `CDEI`) não exibe Desempenho: não há IDEB aplicável, e omitir é
-mais honesto do que mostrar vazio.
-
-`POST /api/v1/ai/school-action-plans` gera o plano em cinco seções — sinais, hipóteses, curto prazo,
-médio prazo e dados faltantes — com guardrails e a política (`raw_rows_access`,
-`decision_automation`) no rodapé. Erros 503 e 422 viram mensagem na tela, sem derrubar o painel.
+O Railway fornece `PORT` automaticamente; não é necessário fixar `5173` ou
+`4173` nas variáveis do serviço.
 
 ## Estrutura
 
 ```
 src/
-  api/         types.ts espelha os contratos Pydantic; client.ts resolve a origem;
-               fixtures.ts gera o conjunto determinístico (semente 20260830)
-  domain/      indicators.ts (limiares VISUAIS, publicados na legenda)
-               network.ts   (agregação por CRE — provisória, ver abaixo)
-               geo.ts       (projeção e casco convexo, sem tiles externos)
-  screens/     Hoje · Comparar · Mapa · Escola · Dados
-  components.tsx, styles.css
+├── api/          contratos (types.ts) e cliente (client.ts) — cada função já sabe o endpoint do backend
+├── domain/       regras puras: grupamento por idade, CPF/CEP, critérios e pontuação, demanda, passos e validação
+├── mocks/        unidades sintéticas (semente fixa, dentro do limite IBGE do município), bairros, serviços simulados,
+│                 repositório local de inscrições (localStorage) e inscrições de exemplo
+├── store/        rascunho da inscrição (context + reducer), espelhado no localStorage a cada mudança
+├── components/   ui/ = coss ui (vendorizado) · shell/ = casca mobile · comuns/ = campos, escolhas, avisos, notificação
+└── screens/      Início, passos 1–8 do wizard, Confirmação, Acompanhar
 ```
 
-## Regras que o código respeita
+Stack: React 19 · TypeScript · Vite 8 · Tailwind v4 (tokens em `styles/theme.css`, marca `#13335a`) ·
+coss ui (Base UI) · react-router 7 · Leaflet/OSM · zod-free (validação em `domain/passos.ts`).
 
-- **O front não calcula indicador.** Os valores vêm do backend. `domain/indicators.ts`
-  contém apenas limiares de cor, e todos aparecem na legenda da tela.
-- **`domain/network.ts` é temporário.** Agrega por CRE porque
-  `GET /api/v1/network/snapshot` (fase B3) ainda não existe. A tela Comparar
-  declara isso em uma faixa fixa. Quando o endpoint entrar, o módulo é apagado.
-- **Valor ausente nunca vira zero.** Célula bloqueada é hachura, sem número.
-- **A navegação deriva de `/api/v1/capabilities`.** `DISABLED` some do menu;
-  `SCHEMA_ONLY` e `UNAVAILABLE` mantêm a rota e explicam o pré-requisito.
-- **Sem tiles externos.** O mapa é desenhado das próprias coordenadas — funciona
-  offline. As regiões são o casco convexo dos pontos de cada CRE, e a legenda diz
-  que não são a fronteira oficial.
-- **Séries temporais não estão no contrato do backend.** Em modo live a coluna
-  de 12 meses mostra hachura, não uma linha inventada.
+## Contratos que o backend (BigQuery) precisa servir
 
-## Pendências conhecidas
+```
+GET  /api/v1/unidades?lat&lon&grupamento&horario&bairro   → UnidadeProxima[]
+GET  /api/v1/unidades/{id}                                 → Unidade
+GET  /api/v1/cep/{cep}                                     → Partial<Endereco>
+POST /api/v1/otp · /otp/verificar                          → { ok }
+POST /api/v1/pix/verificar · /pix/confirmar                → { enviado } · { ok }
+POST /api/v1/documentos/pre-analise (multipart)            → DocumentoAnalise   (Claude lê; nunca pontua)
+POST /api/v1/inscricoes                                    → Inscricao
+GET  /api/v1/inscricoes/{codigo}?cpf=                      → Inscricao (status, timeline, posição por opção)
+POST /api/v1/inscricoes/{codigo}/convocacao {aceite}       → Inscricao
+```
 
-1. `POST /api/v1/data/profile` ainda não está ligado à tela Dados (o painel usa
-   um perfil de exemplo, rotulado).
-2. Situações em Hoje são fixture do contrato antecipado de `/network/snapshot`;
-   não há agente ligado.
-3. Sem testes ainda — Vitest + Testing Library são o próximo passo.
+Tipos em `src/api/types.ts`. As tabelas do briefing (inscrições por opção, respostas
+socioeconômicas, perguntas por processo, unidades escolares) alimentam exatamente esses campos.
+
+## Guardrails que o protótipo já respeita
+
+- **Pontuação determinística**: soma de pesos por critério (`domain/prioridade.ts`), versionada por
+  processo. A IA só faz pré-análise de documento (legibilidade, tipo, consistência) — a validação
+  final é da unidade, e a tela diz isso.
+- **Classificação auditável**: "Por que esta posição?" mostra critérios, pesos e data da inscrição.
+- **Ninguém perde prioridade por escolher errado** no modal inicial: as perguntas aparecem para
+  todos e a etapa de documentos entra sozinha.
+- **Rascunho nunca se perde**: cada passo é salvo no aparelho.
+- **Pix como canal durável**: chave verificada por micro-Pix com código; convocação chega como
+  notificação do banco mesmo se o telefone mudar. Consentimento explícito com finalidade (LGPD).
+
+## Demonstração
+
+- Fluxo completo: Início → "Inscrever criança". Os códigos de OTP e de Pix aparecem na
+  "notificação simulada" da própria tela.
+- Acompanhamento: `DEMO-2027-FILA` (na fila) e `DEMO-2027-VAGA` (convocada, com aceitar/recusar);
+  botões "Simular convocação" / "Voltar para a fila" existem só na demo.
+- As creches são **fictícias** (nomes e posições geradas); o servidor Data.Rio/SME estava fora
+  durante o evento. Trocar `mocks/unidades.ts` pelo endpoint real não muda nenhuma tela.
+
+## Parâmetros a confirmar com a SME
+
+Data de corte etária (31/03) e tabela idade→grupamento; texto e pesos das perguntas do processo
+vigente; regra de desempate e de processamento das 5 opções; operação de Pix de saída em escala.
