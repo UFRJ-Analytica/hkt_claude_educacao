@@ -133,7 +133,9 @@ export async function listarUnidades(q: BuscaUnidades): Promise<UnidadeProxima[]
     })
     .filter((u) => u.oferta !== null)
     .sort((a, b) => a.distanciaKm - b.distanciaKm);
-  return lista.slice(0, q.limite ?? 60);
+  // Sem `limite`, devolve a rede inteira (todas as unidades com oferta para o
+  // grupamento) — a lista e o mapa mostram tudo, ordenado por distância.
+  return q.limite ? lista.slice(0, q.limite) : lista;
 }
 
 export async function obterUnidade(id: string): Promise<Unidade | null> {

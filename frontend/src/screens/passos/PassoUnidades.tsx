@@ -54,7 +54,7 @@ export function PassoUnidades() {
   useEffect(() => {
     let vivo = true;
     setCarregando(true);
-    listarUnidades({ lat: centro[0], lon: centro[1], grupamento, horario: r.horario, bairro: bairroAplicado || null, limite: 40 }).then((lista) => {
+    listarUnidades({ lat: centro[0], lon: centro[1], grupamento, horario: r.horario, bairro: bairroAplicado || null }).then((lista) => {
       if (!vivo) return;
       setUnidades(lista);
       setCarregando(false);
