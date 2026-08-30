@@ -164,8 +164,9 @@ Checar contraste: `#13335a` sobre branco = 11.9:1; `#1f4f86` sobre branco = 7.6:
 ## 5. App standalone — plano
 
 ### 5.1 Onde e como
-Nova pasta na raiz do hackathon: **`creche-app/`** (Vite + React + TS, mesma stack). Copiar de
-`hkt_claude_educacao/frontend`: `components/ui/`, `components.json`, `styles/{base,coss,theme}.css`,
+O protótipo foi criado inicialmente como app standalone e depois consolidado na raiz
+**`frontend/`** (Vite + React + TS, mesma stack). Reaproveitar `components/ui/`,
+`components.json`, `styles/{base,coss,theme}.css`,
 `lib/`, `hooks/`, `domain/{projection,rio-geometry,geo,format}.ts`, `api/client.ts` (adaptado),
 `index.html` (fontes), `vite.config.ts`, `tsconfig*`, `.oxlintrc.json`. Não copiar `legacy.css`.
 Adicionar: `react-leaflet` + `leaflet` (opcional), `zod` (validação de CPF/CEP/datas).
@@ -247,7 +248,7 @@ Perguntas por processo, Unidades) alimentam exatamente esses campos.
 
 ## 6. Estado da entrega (30/08/2026, fim da tarde)
 
-**Construído em `hkt_claude_educacao/frontend/creche-app/`** (React 19 · Vite 8 · Tailwind v4 · coss ui · Leaflet/OSM), `npm run dev` para rodar:
+**Construído em `hkt_claude_educacao/frontend/`** (React 19 · Vite 8 · Tailwind v4 · coss ui · Leaflet/OSM), `npm run dev` para rodar:
 
 | Tela | Rota | Estado |
 |---|---|---|
