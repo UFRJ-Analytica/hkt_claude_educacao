@@ -23,8 +23,10 @@ export const PASSOS: Passo[] = [
 
 /** Passos visíveis para este rascunho (documentos só aparece se houver critério). */
 export function passosVisiveis(r: Rascunho): Passo[] {
-  const temCriterio = criteriosMarcados(r.prioridade).length > 0 || r.modo === 'prioritaria';
-  return PASSOS.filter((p) => p.id !== 'documentos' || temCriterio);
+  // Quem escolheu a inscrição comum não passa pela situação da família nem por documentos.
+  const prioritaria = r.modo === 'prioritaria';
+  const temCriterio = criteriosMarcados(r.prioridade).length > 0;
+  return PASSOS.filter((p) => (p.id === 'prioridade' ? prioritaria : p.id === 'documentos' ? prioritaria && temCriterio : true));
 }
 
 export function indicePasso(r: Rascunho, id: string): number {
@@ -51,7 +53,11 @@ export function validarPasso(r: Rascunho, id: string): Record<string, string> {
       if (r.crianca.nome.trim().split(/\s+/).length < 2) erros.nome = 'Escreva o nome completo da criança.';
       const cls = classificarIdade(r.crianca.nascimento);
       if (!cls) erros.nascimento = 'Informe a data de nascimento.';
-      else if (!cls.grupamento) erros.nascimento = cls.motivo;
+      else if (!cls.grupamento && !r.grupamento) erros.nascimento = cls.motivo;
+      if (!r.grupamento) erros.grupamento = 'Escolha a turma.';
+      if (!r.crianca.sexo) erros.sexo = 'Informe o sexo da criança.';
+      if (!r.horario) erros.horario = 'Escolha o horário.';
+      if (r.crianca.jaEstudou === null) erros.jaEstudou = 'Responda se a criança já frequentou creche da rede.';
       break;
     }
     case 'responsavel': {
@@ -77,6 +83,7 @@ export function validarPasso(r: Rascunho, id: string): Record<string, string> {
       break;
     }
     case 'prioridade': {
+      if (r.modo !== 'prioritaria') break;
       const faltam = CRITERIOS.filter((c) => typeof r.prioridade[c.id] !== 'boolean');
       if (faltam.length > 0) erros.prioridade = faltam.length === CRITERIOS.length ? 'Responda às perguntas para continuar.' : `Falta responder ${faltam.length} pergunta(s).`;
       break;

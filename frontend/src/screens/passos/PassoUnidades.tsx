@@ -1,13 +1,17 @@
-import { ArrowDown, ArrowUp, Briefcase, Home, ListOrdered, LocateFixed, MapPin, Plus, Search, X } from 'lucide-react';
+import { Briefcase, GripVertical, Home, ListOrdered, LocateFixed, MapPin, Plus, Save, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { listarUnidades } from '@/api/client';
+import { useNavigate } from 'react-router-dom';
+import { atualizarOpcoes, listarUnidades } from '@/api/client';
 import type { UnidadeProxima } from '@/api/types';
 import { BottomBar, Page, PageTitle, TopBar } from '@/components/shell';
 import { Aviso, DemandaTag } from '@/components/comuns';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Drawer, DrawerFooter, DrawerHeader, DrawerPanel, DrawerPopup, DrawerTitle } from '@/components/ui/drawer';
-import { DEMANDA_DICA } from '@/domain/demanda';
+import { DEMANDA_DICA, estimarPosicao } from '@/domain/demanda';
+import { pontuar } from '@/domain/prioridade';
+import { useIsMobile } from '@/hooks/use-media-query';
+import { toastManager } from '@/components/ui/toast';
 import { formatarDistancia, RIO_CENTRO } from '@/domain/geo';
 import { classificarIdade } from '@/domain/grupamento';
 import { cn } from '@/lib/utils';
@@ -21,8 +25,16 @@ type Origem = 'casa' | 'trabalho' | 'gps';
 
 export function PassoUnidades() {
   const p = usePasso('unidades');
-  const { r, set } = p;
-  const grupamento = classificarIdade(r.crianca.nascimento)?.grupamento ?? 'Maternal I';
+  const { r, set, reset, criterios } = p;
+  const nav = useNavigate();
+  const mobile = useIsMobile();
+  const grupamento = r.grupamento ?? classificarIdade(r.crianca.nascimento)?.grupamento ?? 'Maternal I';
+  const horario = r.horario ?? 'Integral';
+  const pontuacao = pontuar(criterios);
+  const editando = r.editandoCodigo;
+  const [salvando, setSalvando] = useState(false);
+  const [busca, setBusca] = useState('');
+  const [arrastando, setArrastando] = useState<string | null>(null);
 
   const [origem, setOrigem] = useState<Origem>('casa');
   const [gps, setGps] = useState<{ lat: number; lon: number } | null>(null);
@@ -54,7 +66,7 @@ export function PassoUnidades() {
   useEffect(() => {
     let vivo = true;
     setCarregando(true);
-    listarUnidades({ lat: centro[0], lon: centro[1], grupamento, horario: r.horario, bairro: bairroAplicado || null }).then((lista) => {
+    listarUnidades({ lat: centro[0], lon: centro[1], grupamento, horario, bairro: bairroAplicado || null }).then((lista) => {
       if (!vivo) return;
       setUnidades(lista);
       setCarregando(false);
@@ -62,7 +74,7 @@ export function PassoUnidades() {
     return () => {
       vivo = false;
     };
-  }, [centro, grupamento, r.horario, bairroAplicado]);
+  }, [centro, grupamento, horario, bairroAplicado]);
 
   const usarGps = () => {
     if (gps) {
@@ -99,32 +111,64 @@ export function PassoUnidades() {
     }
     set('opcoes', [...escolhidas, id]);
   };
-  const mover = (id: string, delta: -1 | 1) => {
-    const i = escolhidas.indexOf(id);
-    const j = i + delta;
-    if (i < 0 || j < 0 || j >= escolhidas.length) return;
+  /** Reordena arrastando pela alça: a unidade arrastada assume a posição da que está sob o dedo/cursor. */
+  const moverPara = (id: string, alvoId: string) => {
+    if (id === alvoId) return;
+    const de = escolhidas.indexOf(id);
+    const para = escolhidas.indexOf(alvoId);
+    if (de < 0 || para < 0) return;
     const nova = [...escolhidas];
-    [nova[i], nova[j]] = [nova[j], nova[i]];
+    nova.splice(de, 1);
+    nova.splice(para, 0, id);
     set('opcoes', nova);
+  };
+  const aoArrastar = (e: React.PointerEvent) => {
+    if (!arrastando) return;
+    const alvo = (document.elementFromPoint(e.clientX, e.clientY) as Element | null)?.closest<HTMLElement>('[data-escolha]');
+    if (alvo?.dataset.escolha) moverPara(arrastando, alvo.dataset.escolha);
+  };
+
+  const salvarAlteracao = async () => {
+    if (!editando) return;
+    if (escolhidas.length === 0) {
+      p.avancar();
+      return;
+    }
+    setSalvando(true);
+    const insc = await atualizarOpcoes(editando, escolhidas, r.aceitaRealocacao);
+    setSalvando(false);
+    if (!insc) {
+      toastManager.add({ title: 'Não foi possível salvar', description: 'Tente de novo em instantes.', type: 'error' });
+      return;
+    }
+    reset();
+    toastManager.add({ title: 'Lista de creches atualizada', description: 'A posição em cada creche foi recalculada.', type: 'success' });
+    nav(`/acompanhar/${insc.codigo}`, { replace: true });
   };
 
   const porId = useMemo(() => new Map(unidades.map((u) => [u.id, u])), [unidades]);
   const focada = foco ? porId.get(foco) ?? null : null;
 
   const listaOrdenada = useMemo(() => {
-    if (!foco) return unidades;
-    const f = unidades.find((u) => u.id === foco);
-    return f ? [f, ...unidades.filter((u) => u.id !== foco)] : unidades;
-  }, [unidades, foco]);
+    const termo = busca.trim().toLowerCase();
+    const base = termo ? unidades.filter((u) => u.nome.toLowerCase().includes(termo)) : unidades;
+    if (!foco) return base;
+    const f = base.find((u) => u.id === foco);
+    return f ? [f, ...base.filter((u) => u.id !== foco)] : base;
+  }, [unidades, foco, busca]);
 
   return (
     <>
-      <TopBar voltarPara={p.voltarPara} passo={p.indice} total={p.total} />
+      <TopBar voltarPara={editando ? `/acompanhar/${editando}` : p.voltarPara} passo={editando ? undefined : p.indice} total={editando ? undefined : p.total} />
       <Page comRodape largo className="lg:grid lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-6">
         <div className="lg:sticky lg:top-[calc(var(--topbar-h)+20px)] lg:self-start">
-          <PageTitle eyebrow={`Passo ${p.indice} de ${p.total} · ${grupamento} · ${r.horario}`} sub={`Até ${MAX} creches, em ordem de preferência. A cor mostra a demanda para a turma da sua criança.`}>
-            Escolha as creches
+          <PageTitle eyebrow={editando ? `Alterando a inscrição ${editando} · ${grupamento} · ${horario}` : `Passo ${p.indice} de ${p.total} · ${grupamento} · ${horario}`} sub={editando ? 'Você pode mudar a lista e a ordem das creches até o fechamento da matrícula. A posição é recalculada ao salvar.' : `Até ${MAX} creches, em ordem de preferência. A cor mostra a demanda para a turma da sua criança.`}>
+            {editando ? 'Alterar creches' : 'Escolha as creches'}
           </PageTitle>
+          <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-brand-soft-2 bg-brand-soft px-3.5 py-2.5 text-[13px] text-brand">
+            <span className="font-semibold">Sua inscrição: {criterios.length > 0 ? `prioritária (${criterios.length} ${criterios.length === 1 ? 'critério' : 'critérios'})` : 'comum'}</span>
+            <span className="text-brand-2">A previsão em cada creche é uma estimativa com os inscritos de hoje — não é promessa de vaga.</span>
+          </div>
 
           <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Buscar a partir de">
             <Chip ativo={origem === 'casa' && !bairroAplicado} onClick={() => { setOrigem('casa'); setBairroAplicado(''); setBairro(''); }} I={Home}>
@@ -171,7 +215,7 @@ export function PassoUnidades() {
           {r.precisaoEndereco === 'bairro' && origem === 'casa' && !bairroAplicado ? <p className="mb-3 text-[13px] text-ink-3">Posição aproximada pelo bairro de casa.</p> : null}
 
           <div className="relative overflow-hidden rounded-2xl border border-line shadow-e2">
-            <MapaUnidades centro={centro} unidades={unidades} selecionadas={escolhidas} focoId={foco} onFoco={setFoco} className="h-[46vh] min-h-[300px] lg:h-[62vh]" />
+            <MapaUnidades centro={centro} unidades={unidades} selecionadas={escolhidas} focoId={foco} onFoco={setFoco} zoomPelaRoda={mobile} className="h-[46vh] min-h-[300px] lg:h-[62vh]" />
             {focada ? (
               <div className="absolute inset-x-2 bottom-2 z-[1000] rounded-xl border border-line bg-surface p-3 shadow-e3 step-in">
                 <div className="flex items-start justify-between gap-2">
@@ -196,6 +240,23 @@ export function PassoUnidades() {
             ) : null}
             <Legenda />
           </div>
+          <label className="relative mt-3 block">
+            <span className="sr-only">Buscar creche pelo nome</span>
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-3" aria-hidden="true" />
+            <input
+              type="search"
+              placeholder="Buscar creche pelo nome"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              className="h-11 w-full rounded-lg border border-input bg-surface pl-9 pr-9 text-base text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/24"
+            />
+            {busca ? (
+              <button type="button" aria-label="Limpar busca" className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full text-ink-3 hover:bg-surface-2" onClick={() => setBusca('')}>
+                <X className="size-4" />
+              </button>
+            ) : null}
+          </label>
+          {!mobile ? <p className="mt-1 text-[12px] text-ink-3">No computador, use os botões + e − para o zoom; a roda do mouse rola a página.</p> : null}
         </div>
 
         <div className="mt-5 lg:mt-0">
@@ -210,12 +271,12 @@ export function PassoUnidades() {
             </Aviso>
           ) : null}
           <div className="mb-2 flex items-baseline justify-between">
-            <h2 className="text-[15px] font-semibold text-ink">{bairroAplicado ? `Creches em ${bairroAplicado}` : 'Mais próximas primeiro'}</h2>
-            <span className="text-[12px] text-ink-3">{carregando ? 'carregando…' : `${unidades.length} com vaga para ${grupamento}`}</span>
+            <h2 className="text-[15px] font-semibold text-ink">{busca ? `Resultado para “${busca}”` : bairroAplicado ? `Creches em ${bairroAplicado}` : 'Mais próximas primeiro'}</h2>
+            <span className="text-[12px] text-ink-3">{carregando ? 'carregando…' : `${listaOrdenada.length} com vaga para ${grupamento}`}</span>
           </div>
-          {!carregando && unidades.length === 0 ? (
+          {!carregando && listaOrdenada.length === 0 ? (
             <Aviso tipo="warn" titulo="Nenhuma creche encontrada aqui">
-              Tente outro bairro ou volte para a busca por endereço — as mais próximas aparecem primeiro.
+              {busca ? 'Nenhuma creche com esse nome entre as próximas. Limpe a busca ou tente outro bairro.' : 'Tente outro bairro ou volte para a busca por endereço — as mais próximas aparecem primeiro.'}
             </Aviso>
           ) : null}
           <ul className="grid gap-2">
@@ -251,6 +312,7 @@ export function PassoUnidades() {
                               </span>
                             </div>
                           ) : null}
+                          {u.oferta ? <Previsao inscritos={u.oferta.inscritos} vagas={u.oferta.vagas} pontuacao={pontuacao} /> : null}
                           {u.oferta && foco === u.id ? <p className="mt-1 text-[12px] text-ink-3">{DEMANDA_DICA[u.oferta.demanda]}</p> : null}
                         </div>
                       </div>
@@ -269,9 +331,16 @@ export function PassoUnidades() {
           <ListOrdered />
           Suas escolhas ({escolhidas.length})
         </Button>
-        <Button size="xl" onClick={p.avancar}>
-          Continuar
-        </Button>
+        {editando ? (
+          <Button size="xl" onClick={salvarAlteracao} loading={salvando}>
+            <Save />
+            Salvar alterações
+          </Button>
+        ) : (
+          <Button size="xl" onClick={p.avancar}>
+            Continuar
+          </Button>
+        )}
       </BottomBar>
 
       <Drawer open={drawer} onOpenChange={setDrawer}>
@@ -283,29 +352,38 @@ export function PassoUnidades() {
             {escolhidas.length === 0 ? (
               <p className="text-[14px] text-ink-2">Nenhuma creche escolhida ainda. Toque em "Escolher" na lista ou no mapa.</p>
             ) : (
-              <ol className="grid gap-2">
+              <>
+              <p className="mb-2 text-[12px] text-ink-3">Arraste pela alça ☰ para mudar a ordem de preferência.</p>
+              <ol className="grid gap-2" onPointerMove={aoArrastar} onPointerUp={() => setArrastando(null)} onPointerCancel={() => setArrastando(null)}>
                 {escolhidas.map((id, i) => {
                   const u = porId.get(id);
                   return (
-                    <li key={id} className="flex items-center gap-2 rounded-xl border border-line bg-surface-2 p-2">
+                    <li key={id} data-escolha={id} className={cn('flex items-center gap-2 rounded-xl border bg-surface-2 p-2 transition-shadow', arrastando === id ? 'border-brand shadow-e2' : 'border-line')}>
+                      <button
+                        type="button"
+                        aria-label={`Arrastar ${u?.nome ?? id} para mudar a ordem`}
+                        className="grid size-11 shrink-0 cursor-grab touch-none place-items-center rounded-lg text-ink-3 hover:bg-surface active:cursor-grabbing"
+                        onPointerDown={(e) => {
+                          (e.target as Element).setPointerCapture?.(e.pointerId);
+                          setArrastando(id);
+                        }}
+                        onPointerUp={() => setArrastando(null)}
+                      >
+                        <GripVertical className="size-5" />
+                      </button>
                       <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand font-mono text-[13px] font-bold text-brand-ink">{i + 1}</span>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[14px] font-semibold text-ink">{u?.nome ?? id}</p>
+                        <p className="text-[14px] font-semibold leading-snug text-ink">{u?.nome ?? id}</p>
                         <p className="text-[12px] text-ink-3">{i === 0 ? 'Preferida' : `${i + 1}ª opção`}{u ? ` · ${formatarDistancia(u.distanciaKm)}` : ''}</p>
                       </div>
-                      <Button size="icon-lg" variant="outline" aria-label="Subir" disabled={i === 0} onClick={() => mover(id, -1)}>
-                        <ArrowUp />
-                      </Button>
-                      <Button size="icon-lg" variant="outline" aria-label="Descer" disabled={i === escolhidas.length - 1} onClick={() => mover(id, 1)}>
-                        <ArrowDown />
-                      </Button>
-                      <Button size="icon-lg" variant="ghost" aria-label="Remover" onClick={() => alternar(id)}>
+                      <Button size="icon-lg" variant="ghost" className="bg-danger-soft text-danger hover:bg-danger/15" aria-label={`Remover ${u?.nome ?? id}`} onClick={() => alternar(id)}>
                         <X />
                       </Button>
                     </li>
                   );
                 })}
               </ol>
+              </>
             )}
             <label className="mt-4 flex min-h-12 cursor-pointer items-start gap-3 rounded-xl border border-line-2 px-3 py-2.5">
               <Checkbox className="mt-0.5" checked={r.aceitaRealocacao} onCheckedChange={(v) => set('aceitaRealocacao', Boolean(v))} />
@@ -323,6 +401,15 @@ export function PassoUnidades() {
         </DrawerPopup>
       </Drawer>
     </>
+  );
+}
+
+function Previsao({ inscritos, vagas, pontuacao }: { inscritos: number; vagas: number; pontuacao: number }) {
+  const e = estimarPosicao({ inscritos, vagas }, pontuacao);
+  return (
+    <p className={cn('mt-1 text-[12px] tnum', e.dentro ? 'text-ok' : 'text-ink-2')} title="Estimativa com os inscritos de hoje; a posição real vem da pré-classificação diária">
+      Previsão: <b>{e.posicao}ª</b> de {inscritos} inscritos · {e.dentro ? 'dentro das vagas' : 'fila de espera'}
+    </p>
   );
 }
 

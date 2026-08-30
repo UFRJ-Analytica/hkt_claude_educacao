@@ -134,6 +134,10 @@ export interface ApiSource {
   mode: ApiMode;
   base: string | null;
   note: string;
+  /** Backend respondeu ao /health e ao /capabilities (mesmo sem capacidade AVAILABLE). */
+  conectado?: boolean;
+  /** Status por capacidade declarada pelo backend (unidades, inscricao, fila, convocacao…). */
+  capacidades?: Record<string, string>;
 }
 
 /* ============================================================

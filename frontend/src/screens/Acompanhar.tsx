@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, ChevronDown, Clock, Landmark, Mail, MessageCircle, Search, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, Clock, Landmark, Mail, MessageCircle, Pencil, Search, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { consultarInscricao, responderConvocacao, simularEvento } from '@/api/client';
@@ -11,6 +11,7 @@ import { formatarDataBr } from '@/domain/grupamento';
 import { CRITERIOS_POR_ID } from '@/domain/prioridade';
 import { percentualRisco, riscoDaUnidade } from '@/mocks/risco';
 import { cn } from '@/lib/utils';
+import { useRascunho } from '@/store/rascunho';
 
 const STATUS: Record<StatusInscricao, { rotulo: string; cls: string }> = {
   recebida: { rotulo: 'Recebida', cls: 'bg-brand-soft text-brand' },
@@ -39,6 +40,7 @@ function dataHora(iso: string): string {
 export function Acompanhar() {
   const { codigo: codigoRota } = useParams();
   const nav = useNavigate();
+  const { carregarParaEdicao } = useRascunho();
   const [codigo, setCodigo] = useState(codigoRota ?? '');
   const [cpf, setCpf] = useState('');
   const [insc, setInsc] = useState<Inscricao | null>(null);
@@ -209,7 +211,7 @@ export function Acompanhar() {
             ) : null}
             {insc.status === 'documentos_pendentes' ? (
               <Aviso tipo="warn" titulo="Há documento pendente" className="mb-4">
-                Envie pela inscrição ou leve o original à creche da 1ª opção. Sem ele, os pontos do critério não valem na classificação.
+                Envie pela inscrição ou leve o original à creche da 1ª opção. Sem ele, o critério não vale na classificação.
               </Aviso>
             ) : null}
 
@@ -227,17 +229,18 @@ export function Acompanhar() {
             <Section title={`Posição por creche · atualizado ${insc.classificacao ? dataHora(insc.classificacao.atualizadoEm) : '—'}`}>
               <ol className="grid gap-2">
                 {insc.classificacao?.porOpcao.map((o) => (
-                  <li key={o.unidadeId} className="flex items-center gap-3 rounded-xl border border-line bg-surface-2 p-3">
-                    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand font-mono text-[13px] font-bold text-brand-ink">{o.ordem}</span>
+                  <li key={o.unidadeId} className="flex min-w-0 items-center gap-2 rounded-xl border border-line bg-surface-2 p-2.5">
+                    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-brand font-mono text-[12px] font-bold text-brand-ink">{o.ordem}</span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[14px] font-semibold text-ink">{o.unidadeNome}</p>
-                      <p className="text-[12px] text-ink-3 tnum">
-                        {o.vagas} vagas · <DemandaTag demanda={o.demanda} curta className="h-5 px-1 text-[11px]" />
+                      <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-ink">{o.unidadeNome}</p>
+                      <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-ink-3 tnum">
+                        <span>{o.vagas} vagas</span>
+                        <DemandaTag demanda={o.demanda} curta className="h-5 px-1 text-[11px]" />
                       </p>
                     </div>
-                    <div className="text-right">
-                      <p className={cn('font-mono text-[20px] font-semibold leading-none tnum', o.posicao <= o.vagas ? 'text-ok' : 'text-ink')}>{o.posicao}ª</p>
-                      <p className="text-[11px] text-ink-3">{o.posicao <= o.vagas ? 'dentro das vagas' : 'fila de espera'}</p>
+                    <div className="w-[68px] shrink-0 text-right">
+                      <p className={cn('font-mono text-[18px] font-semibold leading-none tnum', o.posicao <= o.vagas ? 'text-ok' : 'text-ink')}>{o.posicao}ª</p>
+                      <p className="text-[10px] leading-tight text-ink-3">{o.posicao <= o.vagas ? 'dentro das vagas' : 'fila de espera'}</p>
                     </div>
                   </li>
                 ))}
@@ -247,26 +250,38 @@ export function Acompanhar() {
               </button>
               {porque ? (
                 <div className="mt-2 rounded-xl bg-brand-soft p-3 text-[13px] text-ink-2">
-                  <p className="mb-2 font-semibold text-brand">Pontuação: {insc.pontuacao} pontos</p>
+                  <p className="mb-2 font-semibold text-brand">{insc.criterios.length === 0 ? 'Inscrição comum' : `Inscrição prioritária · ${insc.criterios.length} ${insc.criterios.length === 1 ? 'critério' : 'critérios'}`}</p>
                   {insc.criterios.length === 0 ? (
-                    <p>Nenhum critério de prioridade. A ordem entre inscrições sem pontos segue a data da inscrição.</p>
+                    <p>Sem critério de prioridade, a ordem entre as inscrições segue a data da inscrição.</p>
                   ) : (
                     <ul className="grid gap-1">
                       {insc.criterios.map((c) => (
-                        <li key={c} className="flex justify-between gap-2">
-                          <span>
-                            {CRITERIOS_POR_ID[c].titulo}
-                            <span className="text-ink-3"> · {insc.documentos[c]?.status === 'pre_aprovado' ? 'doc. pré-aprovado' : insc.documentos[c]?.status === 'revisar' ? 'doc. a conferir' : 'doc. pendente'}</span>
-                          </span>
-                          <span className="font-mono text-brand tnum">+{CRITERIOS_POR_ID[c].pontos}</span>
+                        <li key={c}>
+                          {CRITERIOS_POR_ID[c].titulo}
+                          <span className="text-ink-3"> · {insc.criteriosRecusados?.includes(c) ? 'não aceito pela unidade' : insc.documentos[c]?.status === 'pre_aprovado' ? 'doc. pré-aprovado' : insc.documentos[c]?.status === 'revisar' ? 'doc. a conferir' : 'doc. pendente'}</span>
                         </li>
                       ))}
                     </ul>
                   )}
-                  <p className="mt-2 text-[12px] leading-snug text-ink-3">A posição é calculada por regra fixa (pesos do edital, empate pela data), a mesma para todas as famílias, e pode ser auditada pela SME. Inscrita em {formatarDataBr(insc.criadaEm.slice(0, 10))}.</p>
+                  <p className="mt-2 text-[12px] leading-snug text-ink-3">A posição segue regra fixa do edital (critérios de prioridade e data da inscrição), a mesma para todas as famílias, e pode ser auditada pela SME. Inscrita em {formatarDataBr(insc.criadaEm.slice(0, 10))}.</p>
                 </div>
               ) : null}
             </Section>
+
+            {insc.status !== 'matriculada' && insc.status !== 'prazo_expirado' && insc.status !== 'convocada' ? (
+              <Button
+                size="lg"
+                variant="outline"
+                className="mb-4 h-11 w-full"
+                onClick={() => {
+                  carregarParaEdicao(insc);
+                  nav('/inscricao/unidades');
+                }}
+              >
+                <Pencil />
+                Alterar creches escolhidas
+              </Button>
+            ) : null}
 
             <Section title="Histórico">
               <ol className="relative grid gap-3 border-l border-line pl-4">

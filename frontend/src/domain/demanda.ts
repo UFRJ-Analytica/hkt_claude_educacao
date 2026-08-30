@@ -33,3 +33,14 @@ export function descreverOferta(o: Oferta): string {
   const gerais = Math.max(0, o.vagas - o.vagasPrioritarias);
   return `${o.vagas} vagas (${o.vagasPrioritarias} prioritárias, ${gerais} gerais) · ${o.inscritos} inscritos`;
 }
+
+/**
+ * Posição estimada na fila de uma oferta para uma pontuação: mesma régua de
+ * demonstração usada na pré-classificação (logística em torno de 20 pontos).
+ * Em produção vem do backend (`fila`). É estimativa, não promessa.
+ */
+export function estimarPosicao(o: Pick<Oferta, 'inscritos' | 'vagas'>, pontuacao: number): { posicao: number; dentro: boolean } {
+  const acima = 1 / (1 + Math.exp((pontuacao - 20) / 9));
+  const posicao = Math.max(1, Math.round(o.inscritos * acima) + 1);
+  return { posicao, dentro: posicao <= o.vagas };
+}

@@ -1,6 +1,6 @@
 import { Building2, ClipboardCheck, Megaphone, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { buscarUnidades, resumoUnidade } from '@/api/client';
+import { apiSource, buscarUnidades, resumoUnidade } from '@/api/client';
 import type { CriterioId, FiltrosUnidade, Grupamento, Horario, InscritoUnidade, ResumoUnidade, Unidade } from '@/api/types';
 import { Page, TopBar } from '@/components/shell';
 import { Aviso } from '@/components/comuns';
@@ -62,6 +62,11 @@ export function PerfilCreche() {
   const [versao, setVersao] = useState(0);
   const [seletor, setSeletor] = useState(false);
   const [cobranca, setCobranca] = useState<CobrancaDocumento | null>(null);
+  const [origem, setOrigem] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiSource().then((s) => setOrigem(s.note));
+  }, []);
 
   useEffect(() => {
     try {
@@ -158,7 +163,7 @@ export function PerfilCreche() {
         </Tabs>
 
         <p className="mt-8 text-[12px] leading-snug text-ink-3">
-          {resumo?.proxyVagas}. Todo ato registrado aqui tem autor e horário e não é apagado. Nenhum número desta tela vem de modelo de linguagem.
+          {origem ? `${origem}. ` : ''}{resumo?.proxyVagas}. Todo ato registrado aqui tem autor e horário e não é apagado. Nenhum número desta tela vem de modelo de linguagem.
         </p>
       </Page>
 

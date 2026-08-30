@@ -2,28 +2,25 @@ import { Scale } from 'lucide-react';
 import { BottomBar, Page, PageTitle, Section, TopBar } from '@/components/shell';
 import { Aviso, SimNao } from '@/components/comuns';
 import { Button } from '@/components/ui/button';
-import { CRITERIOS, CRITERIOS_POR_ID, pontuar } from '@/domain/prioridade';
+import { CRITERIOS, CRITERIOS_POR_ID } from '@/domain/prioridade';
 import { usePasso } from './usePasso';
 
 export function PassoPrioridade() {
   const p = usePasso('prioridade');
   const { r, patch, criterios } = p;
-  const pontos = pontuar(criterios);
   const respondidas = CRITERIOS.filter((c) => typeof r.prioridade[c.id] === 'boolean').length;
 
   return (
     <>
       <TopBar voltarPara={p.voltarPara} passo={p.indice} total={p.total} />
       <Page comRodape>
-        <PageTitle eyebrow={`Passo ${p.indice} de ${p.total}`} sub="Cada resposta “sim” soma pontos na classificação e pede um documento. As perguntas aparecem para todas as famílias.">
+        <PageTitle eyebrow={`Passo ${p.indice} de ${p.total}`} sub="Cada resposta “sim” dá prioridade na classificação e pede um documento. Responda com calma: a unidade confere tudo na matrícula.">
           Situação da família
         </PageTitle>
 
-        {r.modo === 'prioritaria' ? (
-          <Aviso tipo="info" className="mb-4">
-            Você disse que a família tem algum caso de prioridade. Marque abaixo quais — e só eles.
-          </Aviso>
-        ) : null}
+        <Aviso tipo="info" className="mb-4">
+          Você disse que a família tem algum caso de prioridade. Marque abaixo quais — e só eles.
+        </Aviso>
 
         <Section>
           <div className="divide-y divide-line">
@@ -50,14 +47,11 @@ export function PassoPrioridade() {
               ) : (
                 <>
                   <p className="mt-1 text-[15px] font-semibold text-brand">
-                    {criterios.length} {criterios.length === 1 ? 'critério' : 'critérios'} · +{pontos} pontos
+                    {criterios.length} {criterios.length === 1 ? 'critério de prioridade' : 'critérios de prioridade'}
                   </p>
                   <ul className="mt-2 grid gap-1 text-[13px] text-ink-2">
                     {criterios.map((id) => (
-                      <li key={id} className="flex justify-between gap-2">
-                        <span>{CRITERIOS_POR_ID[id].titulo}</span>
-                        <span className="font-mono text-brand tnum">+{CRITERIOS_POR_ID[id].pontos}</span>
-                      </li>
+                      <li key={id}>{CRITERIOS_POR_ID[id].titulo}</li>
                     ))}
                   </ul>
                   <p className="mt-2 text-[12px] leading-snug text-brand-2">No próximo passo pedimos a foto de: {criterios.map((id) => CRITERIOS_POR_ID[id].documento.toLowerCase()).join('; ')}.</p>
@@ -67,14 +61,8 @@ export function PassoPrioridade() {
           </div>
         </Section>
 
-        {r.modo === 'normal' && criterios.length > 0 ? (
-          <Aviso tipo="ok" titulo="Boa notícia">
-            Você marcou situações que dão prioridade. Adicionamos a etapa de documentos ao seu caminho — nada foi perdido.
-          </Aviso>
-        ) : null}
-
         <p className="mt-4 text-[12px] leading-snug text-ink-3">
-          A pontuação é uma soma fixa de pesos definidos no edital, calculada por regra — não por inteligência artificial. Os pesos aqui são ilustrativos.
+          A classificação segue regra fixa do edital, a mesma para todas as famílias — não é decidida por inteligência artificial.
         </p>
       </Page>
       <BottomBar>

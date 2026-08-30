@@ -1,6 +1,6 @@
 import L from 'leaflet';
 import { useEffect, useMemo } from 'react';
-import { MapContainer, Marker, TileLayer, useMap } from 'react-leaflet';
+import { MapContainer, Marker, TileLayer, Tooltip, useMap } from 'react-leaflet';
 import type { UnidadeProxima } from '@/api/types';
 import { DEMANDA_PIN } from '@/domain/demanda';
 
@@ -47,6 +47,7 @@ export function MapaUnidades({
   focoId,
   onFoco,
   className,
+  zoomPelaRoda = true,
 }: {
   centro: [number, number];
   unidades: UnidadeProxima[];
@@ -54,6 +55,8 @@ export function MapaUnidades({
   focoId: string | null;
   onFoco: (id: string) => void;
   className?: string;
+  /** No desktop a roda do mouse rola a página; o zoom fica nos botões. */
+  zoomPelaRoda?: boolean;
 }) {
   const zoom = 13;
   const marcadores = useMemo(
@@ -69,13 +72,19 @@ export function MapaUnidades({
 
   return (
     <div className={className}>
-      <MapContainer center={centro} zoom={zoom} scrollWheelZoom className="h-full w-full" attributionControl>
+      <MapContainer center={centro} zoom={zoom} scrollWheelZoom={zoomPelaRoda} className="h-full w-full" attributionControl>
         <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' />
         <Recentrar centro={centro} zoom={zoom} />
         <Redimensionar />
         <Marker position={centro} icon={EU} zIndexOffset={500} interactive={false} />
         {marcadores.map(({ u, icon }) => (
-          <Marker key={u.id} position={[u.lat, u.lon]} icon={icon} zIndexOffset={selecionadas.includes(u.id) ? 400 : focoId === u.id ? 300 : 0} eventHandlers={{ click: () => onFoco(u.id) }} />
+          <Marker key={u.id} position={[u.lat, u.lon]} icon={icon} zIndexOffset={selecionadas.includes(u.id) ? 400 : focoId === u.id ? 300 : 0} eventHandlers={{ click: () => onFoco(u.id) }}>
+            <Tooltip direction="top" offset={[0, -14]} opacity={1}>
+              <span className="font-semibold">{u.nome}</span>
+              <br />
+              <span className="text-[11px]">{u.bairro}{u.oferta ? ` · ${u.oferta.vagas} vagas · ${u.oferta.inscritos} inscritos` : ''}</span>
+            </Tooltip>
+          </Marker>
         ))}
       </MapContainer>
     </div>
