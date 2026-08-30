@@ -1,0 +1,39 @@
+[build]
+builder = "RAILPACK"
+buildCommand = """
+case "$RAILWAY_SERVICE_NAME" in
+  frontend)
+    if [ -d frontend ]; then cd frontend; fi
+    npm ci
+    npm run build
+    ;;
+  backend)
+    if [ -d backend ]; then cd backend; fi
+    uv sync --frozen
+    ;;
+  *)
+    echo "Configure o nome do servico Railway como 'frontend' ou 'backend'." >&2
+    exit 1
+    ;;
+esac
+"""
+
+[deploy]
+startCommand = """
+case "$RAILWAY_SERVICE_NAME" in
+  frontend)
+    if [ -d frontend ]; then cd frontend; fi
+    npx vite preview --host 0.0.0.0 --port "${PORT:-4173}"
+    ;;
+  backend)
+    if [ -d backend ]; then cd backend; fi
+    uv run uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
+    ;;
+  *)
+    echo "Configure o nome do servico Railway como 'frontend' ou 'backend'." >&2
+    exit 1
+    ;;
+esac
+"""
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10

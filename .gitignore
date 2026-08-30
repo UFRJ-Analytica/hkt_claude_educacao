@@ -67,3 +67,4 @@ Thumbs.db
 
 # Keep explicit documentation placeholders
 !data/README.md
+.hermes
