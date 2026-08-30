@@ -193,7 +193,7 @@ export default function Recomposicao() {
       {/* O mapa de calor segue à mão, e de propósito. O cabeçalho é de dois
           níveis (`colSpan` por disciplina, `rowSpan` na identidade e na média),
           coisa que o modelo de coluna do `DataTable` não expressa; e a rampa
-          divergente das células (`#f6e9e0`, `#efd3c2`, `--a3`) não tem
+          divergente das células (`#dfe8f3`, `#c9d6e6`, `--a3`) não tem
           equivalente em token. Só as legendas ao redor viraram kit. */}
       <div className="tblwrap" style={{ marginTop: 22 }}>
         <table className="m matrix">

@@ -20,7 +20,7 @@ const CAP = 'font-mono text-[11px] tabular-nums';
  */
 export function DemoBar({ registryReal }: DemoBarProps): React.ReactElement {
   return (
-    <Alert className="block rounded-none border-0 border-b border-b-[#e6d8cd] bg-[#fbf6f2] px-[var(--pad-x)] py-[9px] text-[12px] leading-[1.55] text-ink-2">
+    <Alert className="block rounded-none border-0 border-b border-b-[#c9d6e6] bg-[#eef3f9] px-[var(--pad-x)] py-[9px] text-[12px] leading-[1.55] text-ink-2">
       <b className="font-semibold text-attn-3">Indicadores em modo demonstração.</b> A API declara{' '}
       <span className={CAP}>network</span>, <span className={CAP}>learning</span>,{' '}
       <span className={CAP}>attendance</span>, <span className={CAP}>capacity</span> e{' '}

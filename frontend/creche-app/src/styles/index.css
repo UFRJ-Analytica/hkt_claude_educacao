@@ -1,0 +1,8 @@
+@import 'tailwindcss';
+
+@import './base.css';
+@import './coss.css';
+@import './theme.css';
+@import './app.css';
+
+@custom-variant dark (&:is(.dark *));

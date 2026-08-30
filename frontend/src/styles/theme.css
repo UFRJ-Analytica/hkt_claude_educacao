@@ -2,8 +2,9 @@
    Pulso da Rede — sistema visual (Tailwind v4 + coss ui)
 
    Regra que não se negocia: COR DE DADO significa uma coisa só —
-   atenção. É uma rampa ordinal de matiz único (--a1..--a3), validada.
-   O acento petróleo é reservado para IA, ação e foco. Nunca para dado.
+   atenção. É uma rampa ordinal de matiz único (--a1..--a3), em azul.
+   O acento (azul da Prefeitura do Rio, #13335a) é reservado para IA, ação
+   e foco. Destrutivo e alerta têm cores semânticas próprias.
 
    Este arquivo faz duas coisas:
    1. declara os tokens do produto (os mesmos de sempre, sem mudança
@@ -29,15 +30,15 @@
   --ink-4: #aeb8bc;
 
   /* rampa de atenção — matiz único, claridade monotônica */
-  --a1: #cb8f6c;
-  --a2: #b25c31;
-  --a3: #8e2c1b;
+  --a1: #8aa6c8;
+  --a2: #13335a;
+  --a3: #0a1e37;
   --void: #aeb6b9;
 
   /* acento: IA, ação, foco */
-  --accent: #16505f;
-  --accent-2: #1d6b7e;
-  --accent-soft: #e7f0f2;
+  --accent: #13335a;
+  --accent-2: #1f4f86;
+  --accent-soft: #e8eef6;
 
   --ok: #2f7d5f;
 
@@ -86,12 +87,12 @@
   --accent-foreground: var(--accent);
 
   /* destrutivo empresta o topo da rampa: é o vermelho que já existe */
-  --destructive: var(--a3);
+  --destructive: #a32d2d;
   --destructive-foreground: #ffffff;
 
   --success: var(--ok);
   --success-foreground: #ffffff;
-  --warning: var(--a2);
+  --warning: #b7791f;
   --warning-foreground: #ffffff;
   --info: var(--accent-2);
   --info-foreground: #ffffff;
