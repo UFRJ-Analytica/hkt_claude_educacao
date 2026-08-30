@@ -6,6 +6,8 @@ pelo celular vendo a fila de cada creche, a direção da unidade valida e convoc
 com um clique, e a Secretaria enxerga a rede inteira em um mapa. Construído em um
 dia sobre os dados reais dos processos de 2021 a 2025.
 
+**Experimente agora: <https://frontend-production-b2ef0.up.railway.app/>**
+
 Claude Impact Lab Rio #2 · desafio da Secretaria Municipal de Educação do Rio de
 Janeiro · 30/08/2026.
 
@@ -131,6 +133,29 @@ python3 integracao-sme/build_risco.py
 cd backend && uv run ruff check app tests scripts && uv run mypy app scripts && uv run python -m pytest -q
 cd frontend && npx tsc -b && npm run build && npm run lint
 ```
+
+## Demonstração
+
+Dois vídeos (gravados em modo mock, dados sintéticos/anonimizados) mostram as
+duas superfícies alteradas pela integração com o BigQuery:
+
+### 1. Tela de unidades — 352 creches reais do BigQuery, classificadas por risco
+<video src="docs/media/01-unidades-risco.webm" width="720" controls></video>
+- 352 unidades servidas a partir da integração (antes: 40 por teto; agora: toda a
+  rede do BigQuery)
+- tag **risco alto / risco baixo** no card de cada creche, calculada pelo modelo
+  `modelo_risco_alocacao_xgb` (XGBoost) treinado com a feature *frequência de
+  inscrições por unidade*
+- risco sobe com mais demanda, desce com menos (alta frequência → mais difícil
+  alocar; baixa frequência → maior chance de vaga)
+
+### 2. Tela Acompanhar — aviso de risco na 1ª opção da inscrição
+<video src="docs/media/02-acompanhar-risco.webm" width="720" controls></video>
+- aviso binário (sem nota na UI) sobre a escola da primeira opção
+- risco baixo → "Boa perspectiva" / risco alto → "Aviso de risco"
+- fonte, data e limitações listadas na legenda; dados derivados de sintético
+
+> Os vídeos foram capturados sem PII. Veja [política de dados](data/README.md).
 
 ## Documentação
 
