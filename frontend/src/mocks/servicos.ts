@@ -148,18 +148,24 @@ export async function mockPreAnalisarDocumento(
 export async function buscarCepViaCep(cep: string): Promise<Partial<Endereco> | null> {
   const d = cep.replace(/\D/g, '');
   if (d.length !== 8) return null;
-  try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 4000);
-    const res = await fetch(`https://viacep.com.br/ws/${d}/json/`, { signal: ctrl.signal });
-    clearTimeout(t);
-    if (!res.ok) return null;
-    const j = (await res.json()) as { erro?: boolean; logradouro?: string; bairro?: string; localidade?: string; uf?: string };
-    if (j.erro) return null;
-    return { cep: `${d.slice(0, 5)}-${d.slice(5)}`, logradouro: j.logradouro ?? '', bairro: j.bairro ?? '', cidade: j.localidade ?? '', uf: j.uf ?? '' };
-  } catch {
-    return null;
+  // O ViaCEP oscila: duas tentativas com 6 s cada antes de entregar o preenchimento manual.
+  for (let tentativa = 0; tentativa < 2; tentativa += 1) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 6000);
+      const res = await fetch(`https://viacep.com.br/ws/${d}/json/`, { signal: ctrl.signal });
+      clearTimeout(t);
+      if (res.status === 400 || res.status === 404) return null;
+      if (!res.ok) throw new Error(`viacep ${res.status}`);
+      const j = (await res.json()) as { erro?: boolean; logradouro?: string; bairro?: string; localidade?: string; uf?: string };
+      if (j.erro) return null;
+      return { cep: `${d.slice(0, 5)}-${d.slice(5)}`, logradouro: j.logradouro ?? '', bairro: j.bairro ?? '', cidade: j.localidade ?? '', uf: j.uf ?? '' };
+    } catch {
+      if (tentativa === 1) return null;
+      await new Promise((r) => setTimeout(r, 600));
+    }
   }
+  return null;
 }
 
 /**

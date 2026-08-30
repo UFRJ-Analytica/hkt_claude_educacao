@@ -66,6 +66,24 @@ src/
 Stack: React 19 · TypeScript · Vite 8 · Tailwind v4 (tokens em `styles/theme.css`, marca `#13335a`) ·
 coss ui (Base UI) · react-router 7 · Leaflet/OSM · zod-free (validação em `domain/passos.ts`).
 
+## Integração com o backend (por capacidade)
+
+O cliente (`src/api/client.ts`) consulta `/health` e `/api/v1/capabilities` uma vez e só chama
+o backend nas capacidades que ele declarar `AVAILABLE`; o resto fica em demonstração, e a tela
+diz isso (rodapé do início e do perfil da creche).
+
+| Capacidade | Funções do cliente | Telas |
+| --- | --- | --- |
+| `unidades` | `listarUnidades`, `obterUnidade`, `buscarUnidades` | escolha de creches, seletor da creche |
+| `inscricao` | `criarInscricao`, `consultarInscricao`, `atualizarOpcoes` | wizard, confirmação, acompanhar |
+| `fila` | `resumoUnidade`, `listarInscritos`, `registrarValidacao`, `registrarCobranca` | perfil da creche · validação |
+| `convocacao` | `responderConvocacao`, `listarChamadas`, `listarModelos`, `registrarMensagem`, `registrarDesfecho`, `estenderPrazo`, `registrarComparecimento` | acompanhar · perfil da creche · convocação |
+
+Localmente: `cd backend && uv run uvicorn app.main:app --port 8000` (o backend já libera CORS para
+`localhost:5180`/`5173`; outras origens via `PULSO_CORS_ORIGINS`) e `VITE_API_MODE=auto` no
+`frontend/.env`. Hoje o backend declara todas as capacidades como `SCHEMA_ONLY`, então o app
+mostra "Backend conectado; dados reais ainda indisponíveis" e segue com os mocks.
+
 ## Contratos que o backend (BigQuery) precisa servir
 
 ```
@@ -78,6 +96,9 @@ POST /api/v1/documentos/pre-analise (multipart)            → DocumentoAnalise 
 POST /api/v1/inscricoes                                    → Inscricao
 GET  /api/v1/inscricoes/{codigo}?cpf=                      → Inscricao (status, timeline, posição por opção)
 POST /api/v1/inscricoes/{codigo}/convocacao {aceite}       → Inscricao
+PATCH /api/v1/inscricoes/{codigo}/opcoes {opcoes, aceitaRealocacao} → Inscricao   (família altera a lista até o fechamento)
+GET  /api/v1/unidades/{id}/resumo|inscritos|chamadas        → perfil da creche
+POST /api/v1/validacao · /chamadas/{id}/mensagem|desfecho|prazo|comparecimento · /inscricoes/{codigo}/cobranca
 ```
 
 Tipos em `src/api/types.ts`. As tabelas do briefing (inscrições por opção, respostas

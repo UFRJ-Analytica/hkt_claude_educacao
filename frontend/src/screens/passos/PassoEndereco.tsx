@@ -29,11 +29,12 @@ function BlocoEndereco({
 }) {
   const [buscando, setBuscando] = useState(false);
   const [semCep, setSemCep] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
   const ultimoCep = useRef('');
 
   useEffect(() => {
     const d = valor.cep.replace(/\D/g, '');
-    if (d.length !== 8 || d === ultimoCep.current) return;
+    if (d.length !== 8 || (d === ultimoCep.current && tentativa === 0)) return;
     ultimoCep.current = d;
     let vivo = true;
     setBuscando(true);
@@ -47,7 +48,7 @@ function BlocoEndereco({
     return () => {
       vivo = false;
     };
-  }, [valor.cep, onChange]);
+  }, [valor.cep, onChange, tentativa]);
 
   return (
     <div className="grid gap-4">
@@ -60,7 +61,21 @@ function BlocoEndereco({
           value={valor.cep}
           onChange={(e) => onChange({ cep: mascararCep(e.target.value), lat: null, lon: null })}
           erro={erros.cep}
-          dica={buscando ? 'Buscando endereço…' : semCep ? 'CEP não encontrado — preencha a rua e o bairro abaixo.' : 'Preenchemos a rua e o bairro para você.'}
+          dica={
+            buscando ? (
+              'Buscando endereço…'
+            ) : semCep ? (
+              <span>
+                Não conseguimos consultar o CEP agora.{' '}
+                <button type="button" className="font-semibold text-brand underline-offset-2 hover:underline" onClick={() => setTentativa((t) => t + 1)}>
+                  Tentar de novo
+                </button>{' '}
+                ou preencha rua e bairro abaixo.
+              </span>
+            ) : (
+              'Preenchemos a rua e o bairro para você.'
+            )
+          }
         />
         {mostrarGps ? (
           <Button type="button" size="lg" variant="outline" className="mb-[26px] h-[38px]" onClick={onGps} loading={gpsEstado === 'buscando'}>
@@ -69,7 +84,7 @@ function BlocoEndereco({
           </Button>
         ) : null}
       </div>
-      {gpsEstado === 'negado' ? <p className="-mt-2 text-[13px] text-ink-3">Sem permissão de localização — tudo bem, o CEP resolve.</p> : null}
+      {gpsEstado === 'negado' ? <p className="-mt-2 text-[13px] text-ink-3">Sem localização agora (permissão negada ou sem sinal) — tudo bem, o CEP resolve.</p> : null}
       <CampoTexto label="Rua" autoComplete={`${prefixo} address-line1`} value={valor.logradouro} onChange={(e) => onChange({ logradouro: e.target.value, lat: null, lon: null })} erro={erros.logradouro} />
       <div className="grid grid-cols-[1fr_1.4fr] gap-3">
         <CampoTexto label="Número" inputMode="numeric" value={valor.numero} onChange={(e) => onChange({ numero: e.target.value })} erro={erros.numero} />
@@ -92,15 +107,19 @@ export function PassoEndereco() {
       return;
     }
     setGps('buscando');
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        patch('endereco', { lat: pos.coords.latitude, lon: pos.coords.longitude });
-        set('precisaoEndereco', 'endereco');
-        setGps('ok');
-      },
-      () => setGps('negado'),
-      { enableHighAccuracy: true, timeout: 8000 },
-    );
+    const ok = (pos: GeolocationPosition) => {
+      patch('endereco', { lat: pos.coords.latitude, lon: pos.coords.longitude });
+      set('precisaoEndereco', 'endereco');
+      setGps('ok');
+    };
+    // 1ª tentativa precisa; se der timeout/sem sinal, aceita posição aproximada (rede/celular) recente.
+    navigator.geolocation.getCurrentPosition(ok, (e1) => {
+      if (e1.code === e1.PERMISSION_DENIED) {
+        setGps('negado');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(ok, () => setGps('negado'), { enableHighAccuracy: false, timeout: 12000, maximumAge: 120000 });
+    }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 });
   };
 
   const continuar = async () => {

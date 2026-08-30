@@ -279,3 +279,24 @@ export function registrarCobrancaNaFamilia(codigo: string, documento: string): v
   db[codigo] = insc;
   gravar(db);
 }
+
+export async function mockAtualizarOpcoes(codigo: string, opcoes: string[], aceitaRealocacao: boolean): Promise<Inscricao | null> {
+  await espera(500);
+  const db = ler();
+  const insc = db[codigo.trim().toUpperCase()];
+  if (!insc) return null;
+  const antes = insc.opcoes.slice();
+  insc.opcoes = opcoes.slice(0, 5);
+  insc.aceitaRealocacao = aceitaRealocacao;
+  insc.classificacao = { atualizadoEm: new Date().toISOString(), porOpcao: preClassificar(insc) };
+  const mudou = antes.join('|') !== insc.opcoes.join('|');
+  insc.timeline.push({
+    em: new Date().toISOString(),
+    titulo: mudou ? 'Lista de creches alterada' : 'Preferências confirmadas',
+    detalhe: `${insc.opcoes.length} ${insc.opcoes.length === 1 ? 'opção' : 'opções'} · ${aceitaRealocacao ? 'aceita vaga em qualquer opção' : 'só na ordem escolhida'}. A posição foi recalculada.`,
+    tipo: 'info',
+  });
+  db[insc.codigo] = insc;
+  gravar(db);
+  return insc;
+}

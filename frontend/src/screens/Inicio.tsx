@@ -1,5 +1,5 @@
 import { ArrowRight, Baby, CalendarDays, MapPinned, ShieldCheck, Wallet } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiSource } from '@/api/client';
 import { Page, TopBar, Wordmark } from '@/components/shell';
@@ -16,7 +16,9 @@ export function Inicio() {
   const [aberto, setAberto] = useState(false);
   const [lido, setLido] = useState(false);
   const [origem, setOrigem] = useState<string | null>(null);
+  const topoModal = useRef<HTMLParagraphElement | null>(null);
   const temRascunho = Boolean(r.atualizadoEm) && r.modo !== null;
+  const editando = r.editandoCodigo;
 
   useEffect(() => {
     apiSource().then((s) => setOrigem(s.mode === 'live' ? null : s.note));
@@ -41,8 +43,8 @@ export function Inicio() {
           </p>
           <div className="mt-5 flex flex-col gap-2">
             {temRascunho ? (
-              <Button size="xl" className="w-full border-white bg-white text-brand hover:bg-white/90" render={<Link to="/inscricao/crianca" />}>
-                Continuar inscrição de {r.crianca.nome.split(' ')[0] || 'sua criança'}
+              <Button size="xl" className="w-full border-white bg-white text-brand hover:bg-white/90" render={<Link to={editando ? '/inscricao/unidades' : '/inscricao/crianca'} />}>
+                {editando ? `Continuar alteração das creches (${editando})` : `Continuar inscrição de ${r.crianca.nome.split(' ')[0] || 'sua criança'}`}
                 <ArrowRight />
               </Button>
             ) : null}
@@ -97,7 +99,7 @@ export function Inicio() {
         </section>
 
         <p className="text-center text-[12px] leading-relaxed text-ink-3">
-          Protótipo do hackathon Claude · 30/08/2026. {origem ? `${origem}. ` : ''}As creches exibidas são fictícias e a pontuação é ilustrativa; a regra real é a do edital vigente.
+          Protótipo do hackathon Claude · 30/08/2026. {origem ? `${origem}. ` : ''}As creches vêm do extrato da SME e a classificação é ilustrativa; a regra real é a do edital vigente.
         </p>
         <div className="mt-6 flex justify-center">
           <Wordmark />
@@ -105,14 +107,17 @@ export function Inicio() {
       </Page>
 
       <Dialog open={aberto} onOpenChange={setAberto}>
-        <DialogPopup className="sm:max-w-xl">
+        <DialogPopup className="sm:max-w-xl" initialFocus={topoModal}>
           <DialogHeader>
             <DialogTitle>Sua família tem prioridade?</DialogTitle>
             <DialogDescription>
-              Famílias em alguma destas situações ganham pontos na classificação. Se for o seu caso, separe o documento indicado — você poderá enviar a foto pelo app.
+              Famílias em alguma destas situações têm prioridade na classificação. Se for o seu caso, separe o documento indicado — você poderá enviar a foto pelo app.
             </DialogDescription>
           </DialogHeader>
           <DialogPanel className="max-h-[52vh]">
+            <p ref={topoModal} tabIndex={-1} className="mb-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-3 outline-none">
+              Leia a lista até o fim
+            </p>
             <ul className="grid gap-2">
               {CRITERIOS.map((c) => (
                 <li key={c.id} className="flex items-start justify-between gap-3 rounded-xl border border-line bg-surface-2 px-3 py-2.5">
@@ -120,12 +125,11 @@ export function Inicio() {
                     <p className="text-[14px] font-semibold leading-snug text-ink">{c.titulo}</p>
                     <p className="text-[12px] leading-snug text-ink-3">Documento: {c.documento}</p>
                   </div>
-                  <span className="shrink-0 rounded-md bg-brand-soft px-1.5 py-0.5 font-mono text-[12px] font-medium text-brand tnum">+{c.pontos} pts</span>
                 </li>
               ))}
             </ul>
             <p className="mt-3 text-[12px] leading-snug text-ink-3">
-              Não tem certeza? Escolha "Não tenho": as perguntas aparecem para todo mundo e, se alguma resposta der prioridade, o app pede o documento na hora. Ninguém perde pontos por escolher errado aqui.
+              Não tem certeza? Escolha "Tenho um desses casos": as perguntas aparecem no caminho e, se nenhuma se aplicar, nada muda. Quem escolhe "Não tenho" segue direto, sem essas perguntas.
             </p>
             <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-line-2 px-3 py-2 text-[14px] font-medium text-ink">
               <Checkbox checked={lido} onCheckedChange={(v) => setLido(Boolean(v))} />

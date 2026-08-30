@@ -1,5 +1,8 @@
 import { CheckCircle2, Landmark, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
+
+const MAX_ENVIOS = 3;
+const ESPERA_S = 60;
 import { confirmarPix, enviarPixVerificacao } from '@/api/client';
 import { BottomBar, Page, PageTitle, Section, TopBar } from '@/components/shell';
 import { Aviso, CampoTexto, NotificacaoSimulada } from '@/components/comuns';
@@ -16,16 +19,31 @@ export function PassoPix() {
   const [estado, setEstado] = useState<Estado>({ fase: 'inicial' });
   const [codigo, setCodigo] = useState('');
   const [conferindo, setConferindo] = useState(false);
+  const [envios, setEnvios] = useState(0);
+  const [esperaAte, setEsperaAte] = useState<number | null>(null);
+  const [agora, setAgora] = useState(Date.now());
+
+  useEffect(() => {
+    if (esperaAte === null) return;
+    const t = setInterval(() => setAgora(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [esperaAte]);
+  const faltam = esperaAte ? Math.max(0, Math.ceil((esperaAte - agora) / 1000)) : 0;
 
   const chave = r.pix.usarCpf ? r.responsavel.cpf : r.pix.chaveAdicional;
+  const podeEnviar = Boolean(chave) && estado.fase !== 'enviando' && faltam === 0 && envios < MAX_ENVIOS;
 
   useEffect(() => {
     if (r.pix.usarCpf && r.pix.chaveCpf !== r.responsavel.cpf) patch('pix', { chaveCpf: r.responsavel.cpf });
   }, [r.pix.usarCpf, r.pix.chaveCpf, r.responsavel.cpf, patch]);
 
   const enviar = async () => {
+    if (!podeEnviar) return;
     setEstado({ fase: 'enviando' });
     const res = await enviarPixVerificacao(chave);
+    // Cada envio custa R$ 0,01 à Prefeitura: intervalo mínimo e teto por sessão.
+    setEnvios((n) => n + 1);
+    setEsperaAte(Date.now() + ESPERA_S * 1000);
     setEstado({ fase: 'enviado', n: res.notificacao });
   };
 
@@ -91,10 +109,11 @@ export function PassoPix() {
                 </div>
               ) : (
                 <div className="grid gap-3">
-                  <Button size="lg" variant="secondary" className="h-12" disabled={!chave || estado.fase === 'enviando'} loading={estado.fase === 'enviando'} onClick={enviar}>
+                  <Button size="lg" variant="secondary" className="h-12" disabled={!podeEnviar} loading={estado.fase === 'enviando'} onClick={enviar}>
                     <Landmark />
-                    {estado.fase === 'inicial' ? 'Enviar Pix de confirmação' : 'Enviar de novo'}
+                    {estado.fase === 'inicial' ? 'Enviar Pix de confirmação' : envios >= MAX_ENVIOS ? 'Limite de envios atingido' : faltam > 0 ? `Reenviar em ${faltam}s` : 'Enviar de novo'}
                   </Button>
+                  {envios >= MAX_ENVIOS && !r.pix.verificada ? <p className="text-[13px] text-ink-3">Já enviamos {MAX_ENVIOS} confirmações. Confira a chave ou marque "Não tenho chave Pix" e siga com o WhatsApp.</p> : null}
                   {estado.fase === 'enviado' || estado.fase === 'erro' ? (
                     <>
                       <NotificacaoSimulada app="banco" titulo={`Pix recebido · ${estado.n.valor}`} texto={`${estado.n.remetente}: ${estado.n.mensagem}`} rodape="Em produção esta é a notificação real do banco; aqui é uma simulação." />

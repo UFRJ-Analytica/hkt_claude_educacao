@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ANO_LETIVO, classificarIdade, formatarDataBr } from '@/domain/grupamento';
 import { primeiroPassoPendente } from '@/domain/passos';
-import { CRITERIOS_POR_ID, pontuar } from '@/domain/prioridade';
+import { CRITERIOS_POR_ID } from '@/domain/prioridade';
 import { usePasso } from './usePasso';
 
 function Bloco({ titulo, rota, children }: { titulo: string; rota: string; children: ReactNode }) {
@@ -44,7 +44,6 @@ export function PassoRevisao() {
   const [unidades, setUnidades] = useState<Record<string, Unidade>>({});
   const pendente = primeiroPassoPendente(r);
   const cls = classificarIdade(r.crianca.nascimento);
-  const pontos = pontuar(criterios);
 
   useEffect(() => {
     Promise.all(r.opcoes.map((id) => obterUnidade(id))).then((lista) => {
@@ -64,9 +63,9 @@ export function PassoRevisao() {
       const insc = await criarInscricao({
         anoLetivo: ANO_LETIVO,
         modo: r.modo ?? 'normal',
-        crianca: r.crianca,
-        grupamento: cls?.grupamento ?? 'Maternal I',
-        horario: r.horario,
+        crianca: { ...r.crianca, sexo: r.crianca.sexo || 'nao_informar', jaEstudou: r.crianca.jaEstudou === true },
+        grupamento: r.grupamento ?? cls?.grupamento ?? 'Maternal I',
+        horario: r.horario ?? 'Integral',
         responsavel: { nome: r.responsavel.nome, cpf: r.responsavel.cpf, parentesco: r.responsavel.parentesco, telefone: r.responsavel.telefone, email: r.responsavel.email },
         contato: {
           pixChaves: r.pix.semChave ? [] : [r.pix.usarCpf ? r.responsavel.cpf : r.pix.chaveAdicional].filter(Boolean),
@@ -107,7 +106,8 @@ export function PassoRevisao() {
         <Bloco titulo="Criança" rota="/inscricao/crianca">
           <L k="Nome" v={r.crianca.nome || '—'} />
           <L k="Nascimento" v={r.crianca.nascimento ? formatarDataBr(r.crianca.nascimento) : '—'} />
-          <L k="Turma" v={cls?.grupamento ? `${cls.grupamento} · ${r.horario}` : '—'} />
+          <L k="Turma" v={r.grupamento ? `${r.grupamento} · ${r.horario ?? '—'}` : '—'} />
+          <L k="Sexo" v={r.crianca.sexo === 'F' ? 'Menina' : r.crianca.sexo === 'M' ? 'Menino' : '—'} />
         </Bloco>
         <Bloco titulo="Responsável" rota="/inscricao/responsavel">
           <L k="Nome" v={r.responsavel.nome || '—'} />
@@ -127,12 +127,11 @@ export function PassoRevisao() {
             <L k="Critérios" v="Nenhum" />
           ) : (
             <>
-              {criterios.map((id) => {
+              {criterios.map((id, i) => {
                 const d = r.documentos[id];
                 const st = d?.status === 'pre_aprovado' ? 'documento pré-aprovado' : d?.status === 'revisar' ? 'documento a conferir na unidade' : 'documento pendente';
-                return <L key={id} k={`+${CRITERIOS_POR_ID[id].pontos} pts`} v={`${CRITERIOS_POR_ID[id].titulo} · ${st}`} />;
+                return <L key={id} k={`${i + 1}.`} v={`${CRITERIOS_POR_ID[id].titulo} · ${st}`} />;
               })}
-              <L k="Total" v={<span className="font-mono tnum">{pontos} pontos</span>} />
             </>
           )}
         </Bloco>
