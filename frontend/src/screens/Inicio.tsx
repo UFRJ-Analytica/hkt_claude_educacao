@@ -114,7 +114,7 @@ export function Inicio() {
               Famílias em alguma destas situações têm prioridade na classificação. Se for o seu caso, separe o documento indicado — você poderá enviar a foto pelo app.
             </DialogDescription>
           </DialogHeader>
-          <DialogPanel className="max-h-[52vh]">
+          <DialogPanel className="max-h-[52vh] pb-4">
             <p ref={topoModal} tabIndex={-1} className="mb-2 text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-3 outline-none">
               Leia a lista até o fim
             </p>
@@ -131,12 +131,12 @@ export function Inicio() {
             <p className="mt-3 text-[12px] leading-snug text-ink-3">
               Não tem certeza? Escolha "Tenho um desses casos": as perguntas aparecem no caminho e, se nenhuma se aplicar, nada muda. Quem escolhe "Não tenho" segue direto, sem essas perguntas.
             </p>
-            <label className="mt-3 flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-line-2 px-3 py-2 text-[14px] font-medium text-ink">
+            <label className="mt-4 flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-line-2 bg-surface px-3 py-2 text-[14px] font-medium text-ink">
               <Checkbox checked={lido} onCheckedChange={(v) => setLido(Boolean(v))} />
               Li e entendi quem tem prioridade
             </label>
           </DialogPanel>
-          <DialogFooter className="flex-col gap-2 sm:flex-row">
+          <DialogFooter variant="bare" className="flex-col gap-2 sm:flex-row">
             <Button size="lg" variant="outline" className="w-full sm:w-auto" disabled={!lido} onClick={() => escolher('normal')}>
               Não tenho
             </Button>
