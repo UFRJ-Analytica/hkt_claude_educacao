@@ -68,8 +68,11 @@ alocação.
 | `/secretaria` | SME | panorama da rede: números do recorte, mapa por pressão, vizinhas com vaga |
 
 
-[Screencast from 2026-08-30 16-14-33.webm](https://github.com/user-attachments/assets/6c78d078-fd33-4e48-95d0-b813cf999bfc)
-[Screencast from 2026-08-30 16-12-15.webm](https://github.com/user-attachments/assets/f6eb2f79-9914-4d27-bfe3-9c957bc50cae)
+
+<img width="2481" height="1248" alt="Screenshot from 2026-08-30 16-25-42" src="https://github.com/user-attachments/assets/8d162c33-84d0-452b-a484-6ceb2bc2f4e8" />
+<img width="2481" height="1248" alt="Screenshot from 2026-08-30 16-25-22" src="https://github.com/user-attachments/assets/6c266fb7-54eb-474c-90be-9248a119a6a6" />
+<img width="2641" height="1325" alt="Screenshot from 2026-08-30 16-12-52" src="https://github.com/user-attachments/assets/09d1df8e-42a7-48af-9b81-06d20977e454" />
+<img width="423" height="196" alt="Screenshot from 2026-08-30 11-53-28" src="https://github.com/user-attachments/assets/13fd0323-9876-4a74-8785-40e0dc52a910" />
 
 
 ## No que não abrimos mão
