@@ -1,76 +1,10 @@
 /* ============================================================
-   Pulso da Rede — sistema visual
-   Cor de DADO significa uma coisa só: atenção (rampa ordinal de
-   matiz único, validada). O acento petróleo é reservado para IA,
-   ação e foco — nunca para dado.
+   Pulso da Rede — CSS legado, em migração para Tailwind v4 + coss ui.
+   Os tokens vivem em ./theme.css. Este arquivo guarda o que ainda
+   não virou componente e o que é deliberadamente bespoke (mapa,
+   sparkline, células de métrica).
    ============================================================ */
 
-:root {
-  color-scheme: light;
-
-  --canvas: #eef1f2;
-  --surface: #ffffff;
-  --surface-2: #f7f9fa;
-  --line: #e2e7e9;
-  --line-2: #cdd6d9;
-  --line-3: #a8b3b7;
-
-  --ink: #0d1214;
-  --ink-2: #4b565a;
-  --ink-3: #7f8a8e;
-  --ink-4: #aeb8bc;
-
-  /* rampa de atenção — matiz único, claridade monotônica */
-  --a1: #cb8f6c;
-  --a2: #b25c31;
-  --a3: #8e2c1b;
-  --void: #aeb6b9;
-
-  /* acento: IA, ação, foco */
-  --accent: #16505f;
-  --accent-2: #1d6b7e;
-  --accent-soft: #e7f0f2;
-
-  --ok: #2f7d5f;
-
-  --water: #dde6e9;
-  --land: #ffffff;
-  --coast: #b6c5ca;
-
-  --sh-1: 0 1px 2px rgba(13, 18, 20, 0.05);
-  --sh-2: 0 1px 2px rgba(13, 18, 20, 0.05), 0 4px 12px -4px rgba(13, 18, 20, 0.1);
-  --sh-3: 0 1px 3px rgba(13, 18, 20, 0.07), 0 12px 32px -12px rgba(13, 18, 20, 0.22);
-
-  --r: 7px;
-  --r-sm: 5px;
-  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  --sans: 'Schibsted Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --ease: cubic-bezier(0.22, 0.68, 0.32, 1);
-
-  --nav-h: 56px;
-  --pad-x: clamp(16px, 3vw, 40px);
-}
-
-* { box-sizing: border-box; }
-html, body, #root { height: 100%; }
-
-body {
-  margin: 0;
-  background: var(--canvas);
-  color: var(--ink);
-  font-family: var(--sans);
-  font-size: 15px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-h1, h2, h3, h4, h5 { margin: 0; font-weight: 600; letter-spacing: -0.028em; text-wrap: balance; }
-p { margin: 0; }
-button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
-a { color: inherit; text-decoration: none; }
-input, select { font: inherit; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
 
 .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .hidden-sm { display: none; }
@@ -79,7 +13,6 @@ input, select { font: inherit; }
 @keyframes rise { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pulsering { 0% { opacity: 0.55; r: 13; } 70% { opacity: 0; r: 26; } 100% { opacity: 0; r: 26; } }
-.rise { animation: rise 0.42s var(--ease) both; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
@@ -196,6 +129,18 @@ input, select { font: inherit; }
 .ctl { display: inline-flex; align-items: baseline; gap: 6px; color: var(--ink); font-weight: 500; white-space: nowrap; }
 .ctl > span { color: var(--ink-3); font-weight: 400; }
 .ctl select { font-weight: 500; color: var(--ink); background: none; border: 0; border-bottom: 1px solid var(--line-2); padding: 1px 0; cursor: pointer; }
+
+/* Gatilho do Select do coss dentro de um `.ctl`.
+   `.ctl select` casa o ELEMENTO `select`; o gatilho do coss é um `<button>`,
+   então aquela regra não o alcança e o visual do registry (raio, borda nos
+   quatro lados, min-height, sombra, anel de foco) vazava. Esta classe repete
+   a mesma declaração para o botão. Sem camada, como todo o legado — é por
+   isso que ela vence as utilities do coss sem precisar de `!`.
+   O corpo de 13px vinha de `.filterbar` via `select { font: inherit }`; o
+   botão não herda o mesmo caminho, então aqui é explícito. */
+.ctltrigger { display: inline-flex; align-items: center; gap: 6px; width: auto; min-width: 0; min-height: 0; padding: 1px 0; font-size: 13px; font-weight: 500; color: var(--ink); background: none; border: 0; border-bottom: 1px solid var(--line-2); border-radius: 0; box-shadow: none; cursor: pointer; }
+.ctltrigger::before { display: none; }
+.ctltrigger svg { width: 12px; height: 12px; margin: 0; flex: 0 0 auto; }
 .filterbar .right { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); letter-spacing: 0.05em; }
 
 .derived { padding: 10px var(--pad-x); border-bottom: 1px solid var(--line); background: #fbf6f2; font-family: var(--mono); font-size: 10.5px; line-height: 1.65; color: var(--ink-2); }
@@ -310,11 +255,6 @@ table.m tr.child td:first-child { padding-left: calc(var(--pad-x) + 22px); }
 .mapcard h5 { font-size: 15px; font-weight: 600; margin: 6px 0 9px; line-height: 1.28; padding-right: 14px; }
 .codes { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
 .codes span { font-family: var(--mono); font-size: 10px; color: var(--ink-2); border: 1px solid var(--line); border-radius: 3px; padding: 2px 6px; }
-.mrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-2); }
-.mrow .v { font-family: var(--mono); font-size: 12px; color: var(--ink); }
-.mrow .v.a-critical { color: var(--a3); font-weight: 500; }
-.mrow .v.a-attention { color: var(--a2); }
-.mrow .v.a-unreadable { color: var(--void); }
 
 .maplegend { position: absolute; left: 16px; bottom: 16px; right: 16px; z-index: 15; background: rgba(255, 255, 255, 0.94); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 13px; box-shadow: var(--sh-2); }
 .legrow { display: flex; flex-wrap: wrap; gap: 6px 18px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.05em; color: var(--ink-2); }
@@ -335,20 +275,12 @@ table.m tr.child td:first-child { padding-left: calc(var(--pad-x) + 22px); }
 /* ---------------- escola ---------------- */
 .idhead { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 18px; padding: 22px var(--pad-x) 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .idhead h2 { font-size: clamp(20px, 2.6vw, 26px); font-weight: 700; letter-spacing: -0.038em; margin-bottom: 9px; }
-.matchbox { margin-left: auto; text-align: right; }
-.matchbox .val { font-size: 19px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
 .schoolgrid { display: grid; grid-template-columns: 1fr; }
 @media (min-width: 940px) { .schoolgrid { grid-template-columns: 1fr 312px; } }
 .schoolmain { padding: 22px var(--pad-x); }
 @media (min-width: 940px) { .schoolmain { border-right: 1px solid var(--line); } }
 .qpanel { padding: 22px var(--pad-x); }
 .qpanel h5 { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.13em; text-transform: uppercase; color: var(--ink-3); font-weight: 500; margin-bottom: 8px; }
-.qrow { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
-.qrow .nm { flex: 1; color: var(--ink-2); }
-.stt { font-family: var(--mono); font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; }
-.stt.ok { color: var(--ok); border: 1px solid #bfdccf; }
-.stt.deg { color: var(--a2); border: 1px solid #e3cbbb; }
-.stt.blk { color: var(--void); border: 1px dashed var(--line-2); }
 
 .chartblock { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 18px 12px; margin-bottom: 16px; box-shadow: var(--sh-1); }
 .chartblock .ct { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
@@ -657,15 +589,6 @@ tr.meanrow td:first-child { background: var(--surface-2); }
 .derivedinline { margin-top: clamp(22px, 3vw, 32px); padding: 10px 13px; background: #fbf6f2; border: 1px solid #e6d8cd; border-radius: var(--r-sm); font-family: var(--mono); font-size: 10.5px; line-height: 1.65; color: var(--ink-2); }
 .derivedinline b { color: var(--a3); font-weight: 500; }
 
-/* decomposição visível dos componentes do sinal */
-.decomp { display: flex; gap: 7px; }
-.decomp .dm { flex: 1; min-width: 0; }
-.decomp .lab { font-family: var(--mono); font-size: 8px; letter-spacing: 0.04em; color: var(--ink-3); text-transform: uppercase; margin-bottom: 4px; white-space: nowrap; }
-.decomp .track { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
-.decomp .fill { display: block; height: 100%; background: var(--ink-3); border-radius: 2px; }
-.decomp .dm.conf .fill { background: var(--accent); }
-.derivedinline { margin-top: clamp(22px, 3vw, 32px); padding: 10px 13px; background: #fbf6f2; border: 1px solid #e6d8cd; border-radius: var(--r-sm); font-family: var(--mono); font-size: 10.5px; line-height: 1.65; color: var(--ink-2); }
-.derivedinline b { color: var(--a3); font-weight: 500; }
 
 /* ---------- Escola 360: turmas, fluxo e carência da unidade ---------- */
 

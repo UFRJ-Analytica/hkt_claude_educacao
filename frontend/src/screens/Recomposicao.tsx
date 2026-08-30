@@ -5,7 +5,21 @@ import { PERIOD_LABEL, getSkillMatrix, type MatrixScope } from '../api/turmas';
 import { SKILL_MASTERY } from '../domain/indicators';
 import type { Attention } from '../domain/indicators';
 import type { SkillCell } from '../api/types';
-import { Loading } from '../components';
+import {
+  Brief,
+  DerivedNote,
+  EmptyState,
+  FilterBar,
+  FilterControl,
+  Footnote,
+  Legend,
+  Loading,
+  Mono,
+  NoReading,
+  Num,
+  Pad,
+  RowIdentity,
+} from '../components';
 
 /**
  * Limiares da matriz: distância em pontos percentuais para a média da rede NO
@@ -69,22 +83,31 @@ export default function Recomposicao() {
   // carregando para sempre, que é o pior dos três estados.
   if (!matrix.data) {
     return (
-      <div className="statepage">
-        <div className="k">recomposição</div>
-        <h2>Esta unidade não participa da avaliação diagnóstica.</h2>
-        <p>
-          A Atividade Diagnóstica em Rede cobre do 1º ao 9º ano do Ensino Fundamental. Creche, EDI,
-          Clube Escolar, Núcleo de Arte e Biblioteca Escolar não fazem a avaliação — não existe matriz
-          de descritores para elas, e exibir uma vazia sugeriria que o dado deveria estar lá.
-        </p>
-        <p>
-          Para educação infantil, o que se acompanha é acesso, demanda, frequência, infraestrutura e
-          território — não acerto por habilidade.
-        </p>
-        <button type="button" className="btn" style={{ maxWidth: 260 }} onClick={() => setParams({})}>
-          Voltar para a rede
-        </button>
-      </div>
+      <EmptyState
+        // O segundo parágrafo viaja em `action` porque `body` do kit rende um
+        // `<p>` só, e `<p>` dentro de `<p>` é aninhamento inválido. A ordem no
+        // DOM sai idêntica à de antes: `.k`, `h2`, `p`, `p`, `.btn`.
+        action={
+          <>
+            <p>
+              Para educação infantil, o que se acompanha é acesso, demanda, frequência, infraestrutura e
+              território — não acerto por habilidade.
+            </p>
+            <button type="button" className="btn" style={{ maxWidth: 260 }} onClick={() => setParams({})}>
+              Voltar para a rede
+            </button>
+          </>
+        }
+        body={
+          <>
+            A Atividade Diagnóstica em Rede cobre do 1º ao 9º ano do Ensino Fundamental. Creche, EDI,
+            Clube Escolar, Núcleo de Arte e Biblioteca Escolar não fazem a avaliação — não existe matriz
+            de descritores para elas, e exibir uma vazia sugeriria que o dado deveria estar lá.
+          </>
+        }
+        eyebrow="recomposição"
+        title="Esta unidade não participa da avaliação diagnóstica."
+      />
     );
   }
   const data = matrix.data;
@@ -110,15 +133,11 @@ export default function Recomposicao() {
 
   return (
     <div>
-      <div className="filterbar">
-        <span className="ctl">
-          <span>Recorte</span>
-          {data.scope.label}
-        </span>
-        <span className="ctl">
-          <span>Período</span>
-          {PERIOD_LABEL}
-        </span>
+      <FilterBar
+        right={`${data.rows.length} linhas · ${data.skills.length} descritores · ${suppressedCells} células suprimidas`}
+      >
+        <FilterControl label="Recorte">{data.scope.label}</FilterControl>
+        <FilterControl label="Período">{PERIOD_LABEL}</FilterControl>
         {(cre || schoolId) && (
           <button
             type="button"
@@ -129,53 +148,53 @@ export default function Recomposicao() {
             ← voltar para a rede
           </button>
         )}
-        <span className="right">
-          {data.rows.length} linhas · {data.skills.length} descritores · {suppressedCells} células suprimidas
-        </span>
-      </div>
+      </FilterBar>
 
       {data.origin === 'api' ? (
-        <div className="derived governed">
+        <DerivedNote variant="governed">
           <b>Matriz governada pelo backend.</b> As células vêm de{' '}
-          <span className="mono">GET /api/v1/schools/{'{id}'}/skills</span>, com supressão e{' '}
-          <span className="mono">evidence_id</span> declarados por célula.
-        </div>
+          <Mono>GET /api/v1/schools/{'{id}'}/skills</Mono>, com supressão e{' '}
+          <Mono>evidence_id</Mono> declarados por célula.
+        </DerivedNote>
       ) : (
-        <div className="derived">
+        <DerivedNote variant="bar">
           <b>Fixture do contrato.</b> O contrato de turma e{' '}
-          <span className="mono">skill_mastery_rate</span> já existem no backend, mas o release atual
+          <Mono>skill_mastery_rate</Mono> já existem no backend, mas o release atual
           ainda não tem asset granular de turma e habilidade — o endpoint responde 404 sanitizado.
           {data.scope.type !== 'SCHOOL' &&
             ' O rollup por rede e por CRE também segue derivado: o contrato governado cobre o recorte de escola.'}{' '}
           As formas aqui são as do contrato: quando o dado entrar, muda a origem, não a tela.
-        </div>
+        </DerivedNote>
       )}
 
       {weakest && (
-        <div className="pad" style={{ paddingBottom: 0 }}>
-          <div className="when">o que a matriz diz</div>
-          <div className="brief">
-            <h2>
-              {weakest.skill.skill_label} é o descritor mais frágil do recorte, com{' '}
-              {SKILL_MASTERY.format(weakest.mean!)} de acerto.
-            </h2>
-          </div>
-          <p
-            style={{
-              fontSize: 13,
-              color: 'var(--ink-2)',
-              marginTop: 14,
-              maxWidth: '72ch',
-              lineHeight: 1.6,
-            }}
-          >
-            Acerto por descritor não é nota de estudante, não é avaliação de professor e não deve virar
-            ranking de turma. É insumo para decidir onde a recomposição entra primeiro — e a coluna
-            fraca costuma indicar lacuna de ensino, não de esforço.
-          </p>
-        </div>
+        // `.pad` declara `padding` de uma vez e está fora de camada — sem `!` a
+        // utilitária de zerar o rodapé perderia para a abreviação.
+        <Pad className="pb-0!">
+          <Brief
+            eyebrow="o que a matriz diz"
+            headline={
+              <>
+                {weakest.skill.skill_label} é o descritor mais frágil do recorte, com{' '}
+                {SKILL_MASTERY.format(weakest.mean!)} de acerto.
+              </>
+            }
+            lede={
+              <>
+                Acerto por descritor não é nota de estudante, não é avaliação de professor e não deve virar
+                ranking de turma. É insumo para decidir onde a recomposição entra primeiro — e a coluna
+                fraca costuma indicar lacuna de ensino, não de esforço.
+              </>
+            }
+          />
+        </Pad>
       )}
 
+      {/* O mapa de calor segue à mão, e de propósito. O cabeçalho é de dois
+          níveis (`colSpan` por disciplina, `rowSpan` na identidade e na média),
+          coisa que o modelo de coluna do `DataTable` não expressa; e a rampa
+          divergente das células (`#f6e9e0`, `#efd3c2`, `--a3`) não tem
+          equivalente em token. Só as legendas ao redor viraram kit. */}
       <div className="tblwrap" style={{ marginTop: 22 }}>
         <table className="m matrix">
           <thead>
@@ -209,9 +228,8 @@ export default function Recomposicao() {
               return (
                 <tr key={row.id} className={pick === row.id ? 'focus' : ''}>
                   <td>
-                    <button
-                      type="button"
-                      className="creid"
+                    <RowIdentity
+                      drillable={drillable}
                       onClick={() => {
                         if (!drillable) {
                           setPick(pick === row.id ? null : row.id);
@@ -220,26 +238,22 @@ export default function Recomposicao() {
                         if (data.scope.type === 'NETWORK') setParams({ cre: row.id });
                         else setParams({ cre: String(cre), escola: row.id });
                       }}
-                    >
-                      <b>{row.label}</b>
-                      <span>
-                        {drillable ? '▸ ' : ''}
-                        {row.sublabel}
-                      </span>
-                    </button>
+                      sub={row.sublabel}
+                      title={row.label}
+                    />
                   </td>
                   {rowCells.map((c, i) => {
                     const skill = data.skills[i];
                     if (!c || c.suppressed) {
                       return (
                         <td key={skill.skill_id} className="cellbox">
-                          <span
-                            className="hatchcell"
-                            title={
+                          <NoReading
+                            reason={
                               c?.suppression_reason === 'SMALL_GROUP'
                                 ? `Suprimida: menos de ${data.privacy_min_unit_count} estudantes avaliados`
                                 : 'Sem leitura'
                             }
+                            shape="block"
                           />
                         </td>
                       );
@@ -262,24 +276,20 @@ export default function Recomposicao() {
                     );
                   })}
                   <td>
-                    <span className="num mut">
-                      {mean === null ? '—' : SKILL_MASTERY.format(mean)}
-                    </span>
+                    <Num tone="mut">{mean === null ? '—' : SKILL_MASTERY.format(mean)}</Num>
                   </td>
                 </tr>
               );
             })}
             <tr className="meanrow">
               <td>
-                <span className="mono" style={{ fontSize: 11, color: 'var(--ink-3)' }}>
-                  média do recorte
-                </span>
+                <Mono className="text-[11px] text-ink-3">média do recorte</Mono>
               </td>
               {skillMeans.map((s) => (
                 <td key={s.skill.skill_id} className="cellbox">
-                  <span className="mono" style={{ fontSize: 11, color: 'var(--ink-2)' }}>
+                  <Mono className="text-[11px] text-ink-2">
                     {s.mean === null ? '—' : Math.round(s.mean * 100)}
-                  </span>
+                  </Mono>
                 </td>
               ))}
               <td />
@@ -288,41 +298,31 @@ export default function Recomposicao() {
         </table>
       </div>
 
-      <div className="pad" style={{ paddingTop: 22 }}>
-        <div className="matrixlegend">
-          <span>
-            <i className="lv-none" />
-            sem sinal
-          </span>
-          <span>
-            <i className="lv-low" />
-            baixa
-          </span>
-          <span>
-            <i className="lv-attention" />
-            atenção
-          </span>
-          <span>
-            <i className="lv-critical" />
-            crítico
-          </span>
-          <span>
-            <i className="hatchcell" style={{ width: 14, height: 14 }} />
-            suprimida
-          </span>
-          <span className="rule">
-            A cor é a distância para a média da rede no mesmo descritor · sem sinal ≥ −3 pp · baixa &lt; −3 pp ·
-            atenção &lt; −8 pp · crítico &lt; −15 pp. O número é o acerto.
-          </span>
-        </div>
-        <div className="footnote">
+      <Pad className="pt-[22px]!">
+        <Legend
+          className="matrixlegend"
+          items={[
+            { swatch: 'square', swatchClassName: 'lv-none', label: 'sem sinal' },
+            { swatch: 'square', swatchClassName: 'lv-low', label: 'baixa' },
+            { swatch: 'square', swatchClassName: 'lv-attention', label: 'atenção' },
+            { swatch: 'square', swatchClassName: 'lv-critical', label: 'crítico' },
+            { swatch: 'hatch', swatchClassName: 'hatchcell', label: 'suprimida' },
+          ]}
+          rule={
+            <>
+              A cor é a distância para a média da rede no mesmo descritor · sem sinal ≥ −3 pp · baixa &lt; −3 pp ·
+              atenção &lt; −8 pp · crítico &lt; −15 pp. O número é o acerto.
+            </>
+          }
+        />
+        <Footnote>
           {data.limitations.map((l) => (
             <span key={l} style={{ display: 'block', marginBottom: 4 }}>
               {l}
             </span>
           ))}
-        </div>
-      </div>
+        </Footnote>
+      </Pad>
     </div>
   );
 }

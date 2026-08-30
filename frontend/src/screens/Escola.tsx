@@ -8,8 +8,12 @@ import { getFlow, getStaffingGap, isFundamental } from '../api/pipeline';
 import AulaEntregue from '../components/AulaEntregue';
 import type { AISchoolActionPlanResponseV1, IndicatorId, SchoolContext } from '../api/types';
 import { INDICATORS, INDICATOR_ORDER, attentionOf } from '../domain/indicators';
+import { int, pct } from '../domain/format';
 import { useRole } from '../roles';
-import { Loading } from '../components';
+import { Bar, Card, Codes, CoverageCard, Delta, EmptyState, FilterControl, FilterSelect, Guardrails, HatchBar, Legend, ListRow, Loading, Mono, NoReading, Note, SectionHeading, Stat, StatLine } from '../components';
+import type { CodeItem } from '../components';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
 
 /**
  * Painel de contexto da escola.
@@ -25,9 +29,6 @@ import { Loading } from '../components';
  * número — e é o que ela faz.
  */
 
-const int = (v: number) => v.toLocaleString('pt-BR');
-const pct = (v: number) => `${(v * 100).toFixed(1).replace('.', ',')}%`;
-
 const FOCUS_OPTIONS = [
   'frequência e aprendizagem',
   'evasão e abandono',
@@ -35,6 +36,27 @@ const FOCUS_OPTIONS = [
   'demanda e lotação',
   'apoio da CRE',
 ];
+
+/** O `items` do Select do coss: mantém as opções conhecidas antes da hidratação. */
+const FOCUS_ITEMS = FOCUS_OPTIONS.map((f) => ({ label: f, value: f }));
+
+/**
+ * O que o `SelectTrigger` do coss traz de cartão e `.ctl select` não declara —
+ * e que por isso passaria: altura mínima, largura, raio, borda nos quatro
+ * lados, fundo, padding, corpo e sombra. O legado só governa o que ele mesmo
+ * declara, e aqui ele deixou de casar com o seletor (`.ctl select` não alcança
+ * um `<button>`), então a régua de 1px embaixo é reescrita em utilitária.
+ */
+
+/**
+ * `.btn.solid.inline` continua sendo a fonte da verdade visual do botão de
+ * ação — fundo petróleo, raio, padding e corpo saem de `legacy.css`, que ganha
+ * por estar fora de camada. A variante `ghost` é a que menos acrescenta: sem
+ * sombra, sem `inset-shadow`, e o pouco que resta (`border-transparent`,
+ * `text-foreground`) o legado já sobrescreve. Sobra a altura fixa do tamanho
+ * padrão do coss, que é o que `h-auto` desliga.
+ */
+const PLAN_BUTTON = 'btn solid inline h-auto before:hidden sm:h-auto';
 
 /** Educação infantil não tem IDEB. Não oferecer indicador que não se aplica. */
 function isEarlyChildhood(schoolType: string | null): boolean {
@@ -96,15 +118,17 @@ export default function Escola() {
 
   if (!identity) {
     return (
-      <div className="statepage">
-        <div className="k">unidade</div>
-        <h2>Identificador fora do recorte carregado.</h2>
-        <p>
-          O identificador <span className="mono">{id}</span> não está no cadastro carregado nem no
-          recorte do mapa. Isso não significa que a unidade não exista na rede — significa que ela não
-          está neste conjunto.
-        </p>
-      </div>
+      <EmptyState
+        body={
+          <>
+            O identificador <Mono>{id}</Mono> não está no cadastro carregado nem no recorte do mapa.
+            Isso não significa que a unidade não exista na rede — significa que ela não está neste
+            conjunto.
+          </>
+        }
+        eyebrow="unidade"
+        title="Identificador fora do recorte carregado."
+      />
     );
   }
 
@@ -131,6 +155,16 @@ export default function Escola() {
   const fundamental = isFundamental(identity.school_type);
   const classNote = unitClassNote(identity.school_type);
   const suppressedCount = (turmas.data?.turmas ?? []).filter((t) => t.suppressed).length;
+  const isReal = identity.source_kind === 'REAL_PUBLIC';
+
+  /** A procedência da unidade, em chips. `real` marca o que veio de fonte oficial. */
+  const codes: CodeItem[] = [
+    { label: `${identity.cre}ª CRE` },
+    ...(identity.school_type ? [{ label: identity.school_type }] : []),
+    ...(identity.sme_designation ? [{ label: `SME ${identity.sme_designation}` }] : []),
+    { label: identity.inep_id ? `INEP ${identity.inep_id}` : 'INEP não cruzado' },
+    { label: isReal ? 'identidade real' : 'identidade sintética', real: isReal },
+  ];
 
   const runPlan = async () => {
     setPlanning(true);
@@ -145,17 +179,9 @@ export default function Escola() {
   return (
     <div>
       <div className="idhead">
-        <div style={{ minWidth: 0 }}>
+        <div className="min-w-0">
           <h2>{identity.nome}</h2>
-          <div className="codes">
-            <span>{identity.cre}ª CRE</span>
-            {identity.school_type && <span>{identity.school_type}</span>}
-            {identity.sme_designation && <span>SME {identity.sme_designation}</span>}
-            <span>{identity.inep_id ? `INEP ${identity.inep_id}` : 'INEP não cruzado'}</span>
-            <span className={identity.source_kind === 'REAL_PUBLIC' ? 'realtag' : ''}>
-              {identity.source_kind === 'REAL_PUBLIC' ? 'identidade real' : 'identidade sintética'}
-            </span>
-          </div>
+          <Codes items={codes} />
         </div>
         <div className="headactions">
           {mapsUrl && (
@@ -173,308 +199,347 @@ export default function Escola() {
 
       <div className="schoolgrid">
         <div className="schoolmain">
-          <div className={`coverkard${identityOnly ? ' identityonly' : ''}`}>
-            <div className="k">Cobertura de indicadores</div>
-            <p>
-              {localFallback
-                ? `O snapshot do backend não tem métrica para este identificador. Os números abaixo vêm da camada de demonstração local — são os mesmos que pintam esta unidade no mapa, e não são desempenho real.`
-                : (ctx?.metric_coverage.message ??
-                  'Origem local: a API não respondeu, e os indicadores desta tela vêm do recorte sintético carregado.')}
-            </p>
-            {ctx?.metric_coverage.snapshot_id && (
-              <span className="mono snap">
-                snapshot {ctx.metric_coverage.snapshot_id.slice(0, 16)}…
-              </span>
-            )}
-          </div>
+          <CoverageCard
+            alert={identityOnly}
+            eyebrow="Cobertura de indicadores"
+            footer={
+              ctx?.metric_coverage.snapshot_id
+                ? `snapshot ${ctx.metric_coverage.snapshot_id.slice(0, 16)}…`
+                : undefined
+            }
+          >
+            {localFallback
+              ? `O snapshot do backend não tem métrica para este identificador. Os números abaixo vêm da camada de demonstração local — são os mesmos que pintam esta unidade no mapa, e não são desempenho real.`
+              : (ctx?.metric_coverage.message ??
+                'Origem local: a API não respondeu, e os indicadores desta tela vêm do recorte sintético carregado.')}
+          </CoverageCard>
 
           {identityOnly ? (
-            <div className="chartblock">
-              <div className="ct">
-                <h5>Indicadores educacionais</h5>
-                <span className="cs">nenhum carregado para esta unidade</span>
-              </div>
+            <Card
+              subtitle="nenhum carregado para esta unidade"
+              title="Indicadores educacionais"
+              variant="chart"
+            >
               <div className="emptymetrics">
                 {indicators.map((iid) => (
-                  <div className="emptyrow" key={iid}>
-                    <span className="nm">{INDICATORS[iid].label}</span>
-                    <span className="blockcell" />
-                    <span className="mono st">não carregado</span>
-                  </div>
+                  // `layout="cells"`: `.emptyrow` é grade de três colunas
+                  // (`1fr auto 110px`), e um invólucro a mais tiraria a medida
+                  // da coluna do meio.
+                  <ListRow
+                    className="emptyrow"
+                    key={iid}
+                    label={INDICATORS[iid].label}
+                    layout="cells"
+                    meta="não carregado"
+                    slots={{ label: 'nm', meta: 'mono st' }}
+                    trailing={<NoReading shape="cell" />}
+                  />
                 ))}
               </div>
-              <p className="hint">
+              <Note className="hint">
                 A unidade existe e está localizada. O que falta é o cruzamento oficial por{' '}
-                <span className="mono">CO_ENTIDADE</span>/INEP — nenhum valor foi estimado por nome ou
-                endereço.
-              </p>
-            </div>
+                <Mono>CO_ENTIDADE</Mono>/INEP — nenhum valor foi estimado por nome ou endereço.
+              </Note>
+            </Card>
           ) : (
-            <div className="chartblock">
-              <div className="ct">
-                <h5>Indicadores</h5>
-                <span className="cs">
-                  {localFallback
-                    ? 'camada de demonstração local — mesma origem do mapa'
-                    : ctx
-                      ? 'métricas de demonstração — não são desempenho real'
-                      : 'recorte sintético local'}
-                </span>
-              </div>
+            <Card
+              subtitle={
+                localFallback
+                  ? 'camada de demonstração local — mesma origem do mapa'
+                  : ctx
+                    ? 'métricas de demonstração — não são desempenho real'
+                    : 'recorte sintético local'
+              }
+              title="Indicadores"
+              variant="chart"
+            >
               <div className="emptymetrics">
                 {indicators.map((iid) => {
                   const m = metrics[iid];
                   const blocked = !m || m.value === null;
                   const a = attentionOf(m);
                   const spec = INDICATORS[iid];
-                  const w = blocked
+                  const v = blocked
                     ? 0
                     : Math.max(
                         0,
                         Math.min(1, (m!.value! - spec.scale[0]) / (spec.scale[1] - spec.scale[0])),
-                      ) * 100;
+                      );
                   return (
-                    <div className="emptyrow" key={iid}>
-                      <span className="nm">{spec.label}</span>
-                      {blocked ? (
-                        <span className="blockcell" />
-                      ) : (
-                        <span className="bar" style={{ width: 90 }}>
-                          <i className={a} style={{ width: `${w}%` }} />
-                        </span>
-                      )}
-                      <span className={`mono st${blocked ? '' : ' val'}`}>
-                        {blocked ? 'sem leitura' : spec.format(m!.value!)}
-                      </span>
-                    </div>
+                    <ListRow
+                      className="emptyrow"
+                      key={iid}
+                      label={spec.label}
+                      layout="cells"
+                      meta={blocked ? 'sem leitura' : spec.format(m!.value!)}
+                      slots={{ label: 'nm', meta: blocked ? 'mono st' : 'mono st val' }}
+                      trailing={
+                        blocked ? (
+                          <NoReading shape="cell" />
+                        ) : (
+                          // `w-[90px]!` porque `.bar { width: 50px }` está fora
+                          // de camada: sem `!` a largura de 90px não chega.
+                          <Bar className="bar w-[90px]!" label={spec.label} level={a} value={v} />
+                        )
+                      }
+                    />
                   );
                 })}
               </div>
-            </div>
+            </Card>
           )}
 
-          {classNote && <p className="hint standalone">{classNote}</p>}
+          {classNote && <Note className="hint standalone">{classNote}</Note>}
 
           {/* A decomposição deriva da frequência de turma regular. Onde não há
               turma regular, não há o que decompor — e o bloco não aparece. */}
           {!takesAdr(identity.school_type) ? null : identityOnly ? (
-            <div className="chartblock">
-              <div className="ct">
-                <h5>Aula que chegou ao estudante</h5>
-                <span className="cs">depende da frequência, que não está carregada</span>
-              </div>
-              <span className="hatchbar" style={{ height: 12, borderRadius: 4 }} />
-              <p className="hint">
+            <Card
+              subtitle="depende da frequência, que não está carregada"
+              title="Aula que chegou ao estudante"
+              variant="chart"
+            >
+              <HatchBar className="h-[12px]! rounded-[4px]!" />
+              <Note className="hint">
                 A decomposição entre aula dada, cancelada e sem lançamento vem do campo{' '}
-                <span className="mono">id_situacao</span> da frequência diária. Sem esse dado para a
-                unidade, não há o que decompor — e estimar seria inventar.
-              </p>
-            </div>
+                <Mono>id_situacao</Mono> da frequência diária. Sem esse dado para a unidade, não há o
+                que decompor — e estimar seria inventar.
+              </Note>
+            </Card>
           ) : (
             lessons.data && (
-            <div className="chartblock">
-              <div className="ct">
-                <h5>Aula que chegou ao estudante</h5>
-                <span className="cs">previstas → canceladas · sem lançamento · dadas → com presença</span>
-              </div>
-              <AulaEntregue d={lessons.data} compact />
-              <p className="hint">
-                {(lessons.data.effective_rate * 100).toFixed(1).replace('.', ',')}% das{' '}
-                {lessons.data.lessons_planned} aulas previstas. Fixture derivada da frequência
-                carregada — o campo <span className="mono">id_situacao</span> resolve isto de forma
-                exata quando o dado do briefing entrar.
-              </p>
-              </div>
+              <Card
+                subtitle="previstas → canceladas · sem lançamento · dadas → com presença"
+                title="Aula que chegou ao estudante"
+                variant="chart"
+              >
+                <AulaEntregue d={lessons.data} compact />
+                <Note className="hint">
+                  {(lessons.data.effective_rate * 100).toFixed(1).replace('.', ',')}% das{' '}
+                  {lessons.data.lessons_planned} aulas previstas. Fixture derivada da frequência
+                  carregada — o campo <Mono>id_situacao</Mono> resolve isto de forma exata quando o
+                  dado do briefing entrar.
+                </Note>
+              </Card>
             )
           )}
 
           {/* ---------- turmas: o grão onde a decisão acontece ---------- */}
           {fundamental && turmas.data && turmas.data.turmas.length > 0 && (
-            <div className="chartblock">
-              <div className="ct">
-                <h5>Turmas</h5>
-                <span className="cs">
+            <Card
+              subtitle={
+                <>
                   {turmas.data.turmas.length} turmas · {suppressedCount} suprimida
                   {suppressedCount === 1 ? '' : 's'} por grupo pequeno
-                </span>
-              </div>
+                </>
+              }
+              title="Turmas"
+              variant="chart"
+            >
               <div className="turmagrid">
                 {turmas.data.turmas.map((t) => (
-                  <div className={`turmacell${t.suppressed ? ' sup' : ''}`} key={t.turma_id}>
-                    <span className="tl">{t.turma_label}</span>
-                    {t.suppressed ? (
-                      <>
-                        <span className="hatchbar" />
-                        <span className="mono tv">suprimida</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="bar">
-                          <i className="ok" style={{ width: `${t.coverage * 100}%` }} />
-                        </span>
-                        <span className="mono tv">
-                          {t.student_count} est. · {(t.coverage * 100).toFixed(0)}%
-                        </span>
-                      </>
-                    )}
-                  </div>
+                  <ListRow
+                    className={`turmacell${t.suppressed ? ' sup' : ''}`}
+                    key={t.turma_id}
+                    label={t.turma_label}
+                    layout="cells"
+                    meta={
+                      t.suppressed
+                        ? 'suprimida'
+                        : `${t.student_count} est. · ${(t.coverage * 100).toFixed(0)}%`
+                    }
+                    slots={{ label: 'tl', meta: 'mono tv' }}
+                    trailing={
+                      t.suppressed ? (
+                        <HatchBar />
+                      ) : (
+                        // Cobertura atendida é `--ok`, fora da rampa de atenção:
+                        // é uma afirmação sobre a leitura estar completa, não um
+                        // grau de gravidade. O `<i class="ok">` anterior não
+                        // tinha regra e caía no cinza de `.bar i`.
+                        <Bar
+                          className="bar"
+                          indicatorClassName="bg-ok"
+                          label={`cobertura da turma ${t.turma_label}`}
+                          value={t.coverage}
+                        />
+                      )
+                    }
+                  />
                 ))}
               </div>
-              <p className="hint">
+              <Note className="hint">
                 Turma com menos de {PRIVACY_MIN_UNIT_COUNT} estudantes avaliados não tem valor
                 exibido. Em turma pequena, o resultado agregado identifica o estudante — a supressão
                 é da arquitetura, não uma configuração de tela.
-              </p>
-            </div>
+              </Note>
+            </Card>
           )}
 
           {/* ---------- fluxo: para onde o aluno desta escola foi ---------- */}
           {fundamental && flow.data && flow.data.rows.length > 0 && (
-            <div className="chartblock">
-              <div className="ct">
-                <h5>Movimentação de matrícula</h5>
-                <span className="cs">entrada e saída no ano · schema <span className="mono">movimentacao</span></span>
-              </div>
+            <Card
+              subtitle={
+                <>
+                  entrada e saída no ano · schema <Mono>movimentacao</Mono>
+                </>
+              }
+              title="Movimentação de matrícula"
+              variant="chart"
+            >
               {(() => {
                 const r = flow.data.rows[0];
                 return (
                   <>
-                    <div className="statline tight">
-                      <div className="st">
-                        <div className="k">Matrícula</div>
-                        <div className="v">{int(r.matricula_base)}</div>
-                      </div>
-                      <div className="st">
-                        <div className="k">Entradas</div>
-                        <div className="v">+{int(r.entradas)}</div>
-                      </div>
-                      <div className="st">
-                        <div className="k">Saída interna</div>
-                        <div className="v">
-                          −{int(r.saidas_internas)} <em>outra unidade da rede</em>
-                        </div>
-                      </div>
-                      <div className="st">
-                        <div className="k">Saída externa</div>
-                        <div className="v">
-                          −{int(r.saidas_externas)} <em className="bad">fora da rede</em>
-                        </div>
-                      </div>
-                      <div className="st">
-                        <div className="k">Saldo</div>
-                        <div className={`v ${r.saldo < 0 ? 'worse' : ''}`}>{r.saldo}</div>
-                      </div>
-                    </div>
-                    <p className="hint">
+                    <StatLine tight variant="section">
+                      <Stat label="Matrícula" value={int(r.matricula_base)} />
+                      <Stat label="Entradas" value={`+${int(r.entradas)}`} />
+                      <Stat
+                        delta={<em>outra unidade da rede</em>}
+                        label="Saída interna"
+                        value={`−${int(r.saidas_internas)}`}
+                      />
+                      <Stat
+                        delta={<em className="bad">fora da rede</em>}
+                        label="Saída externa"
+                        value={`−${int(r.saidas_externas)}`}
+                      />
+                      <Stat label="Saldo" tone={r.saldo < 0 ? 'bad' : 'neutral'} value={r.saldo} />
+                    </StatLine>
+                    <Note className="hint">
                       {int(r.trajetorias_interrompidas)} estudantes com três ou mais movimentações no
                       ano — contagem, nunca lista nominal. Saída interna e externa não se somam:
                       transferir dentro da rede e sair da rede pedem respostas diferentes.
-                    </p>
+                    </Note>
                   </>
                 );
               })()}
-            </div>
+            </Card>
           )}
 
           {/* ---------- carência por disciplina nesta unidade ---------- */}
           {fundamental && gap.data && (
-            <div className="chartblock">
-              <div className="ct">
-                <h5>Carência docente por disciplina</h5>
-                <span className="cs">horas sem professor · aulas canceladas</span>
-              </div>
+            <Card
+              subtitle="horas sem professor · aulas canceladas"
+              title="Carência docente por disciplina"
+              variant="chart"
+            >
               <div className="gaptable compact">
                 {gap.data.rows.slice(0, 5).map((r) => (
-                  <div className="gaprow" key={r.disciplina}>
-                    <span className="gd">{r.disciplina}</span>
-                    <span className="gt">{int(r.horas_sem_professor)} h</span>
-                    <span className="gbars">
-                      <span className="gbar">
-                        <i className="car" style={{ width: `${Math.min(100, r.taxa_carencia * 260)}%` }} />
-                      </span>
-                      <span className="gbar">
-                        <i className="can" style={{ width: `${Math.min(100, r.taxa_cancelamento * 260)}%` }} />
-                      </span>
-                    </span>
-                    <span className="gv mono">{pct(r.taxa_carencia)}</span>
+                  // As duas barras seguem bespoke: a amplificação de 260% é
+                  // decisão de leitura, não medida linear — um `Meter` diria
+                  // que a largura é o valor, e aqui ela não é.
+                  <ListRow
+                    className="gaprow"
+                    key={r.disciplina}
+                    label={r.disciplina}
+                    layout="cells"
+                    meta={pct(r.taxa_carencia)}
+                    slots={{ label: 'gd', sub: 'gt', trailing: 'gbars', meta: 'gv mono' }}
+                    sub={`${int(r.horas_sem_professor)} h`}
+                    trailing={
+                      <>
+                        <span className="gbar">
+                          <i className="car" style={{ width: `${Math.min(100, r.taxa_carencia * 260)}%` }} />
+                        </span>
+                        <span className="gbar">
+                          <i className="can" style={{ width: `${Math.min(100, r.taxa_cancelamento * 260)}%` }} />
+                        </span>
+                      </>
+                    }
+                  >
                     <span className="gv mono bad">{pct(r.taxa_cancelamento)}</span>
-                  </div>
+                  </ListRow>
                 ))}
-                <div className="gaplegend">
-                  <span>
-                    <i className="car" />
-                    horas sem professor
-                  </span>
-                  <span>
-                    <i className="can" />
-                    aulas canceladas
-                  </span>
-                </div>
+                <Legend
+                  className="gaplegend"
+                  items={[
+                    { swatch: 'bar', swatchClassName: 'car', label: 'horas sem professor' },
+                    { swatch: 'bar', swatchClassName: 'can', label: 'aulas canceladas' },
+                  ]}
+                />
               </div>
-              <p className="hint">
+              <Note className="hint">
                 As duas séries coincidem nesta unidade. O dado disponível não estabelece direção
                 causal entre carência e cancelamento. Carência é medida em disciplina e turma —
                 nenhum identificador de profissional é usado.
-              </p>
-            </div>
+              </Note>
+            </Card>
           )}
 
           {ctx && ctx.comparisons.length > 0 && (
-            <div className="chartblock">
-              <div className="ct">
-                <h5>Escola · CRE · rede</h5>
-                <span className="cs">comparação calculada no backend</span>
-              </div>
+            <Card subtitle="comparação calculada no backend" title="Escola · CRE · rede" variant="chart">
               {ctx.comparisons.map((c) => (
-                <div className="cmprow" key={c.indicator_id}>
-                  <span className="nm">{INDICATORS[c.indicator_id].label}</span>
-                  <span className="trio">
-                    <b>{INDICATORS[c.indicator_id].format(c.school_value)}</b>
-                    <span>
-                      CRE{' '}
-                      {c.cre_average === null
-                        ? '—'
-                        : INDICATORS[c.indicator_id].format(c.cre_average)}
-                    </span>
-                    <span>
-                      rede{' '}
-                      {c.network_average === null
-                        ? '—'
-                        : INDICATORS[c.indicator_id].format(c.network_average)}
-                    </span>
-                  </span>
-                  <span className={`mono delta${(c.delta_vs_cre ?? 0) < 0 ? ' bad' : ''}`}>
-                    {c.delta_vs_cre === null
-                      ? '—'
-                      : `${c.delta_vs_cre > 0 ? '+' : ''}${(c.delta_vs_cre * 100).toFixed(1).replace('.', ',')} pp vs CRE`}
-                  </span>
-                </div>
+                <ListRow
+                  className="cmprow"
+                  key={c.indicator_id}
+                  label={INDICATORS[c.indicator_id].label}
+                  layout="cells"
+                  meta={
+                    // `threshold={0}` e `severeAt={Infinity}` reproduzem a regra
+                    // desta tela: aqui não há piso de ruído nem terceiro degrau —
+                    // a comparação é contra outro recorte, e a leitura é binária.
+                    <Delta
+                      className="mono"
+                      delta={c.delta_vs_cre}
+                      emptyText="—"
+                      severeAt={Infinity}
+                      threshold={0}
+                    >
+                      {c.delta_vs_cre === null
+                        ? undefined
+                        : `${c.delta_vs_cre > 0 ? '+' : ''}${(c.delta_vs_cre * 100).toFixed(1).replace('.', ',')} pp vs CRE`}
+                    </Delta>
+                  }
+                  slots={{ label: 'nm', trailing: 'trio' }}
+                  trailing={
+                    <>
+                      <b>{INDICATORS[c.indicator_id].format(c.school_value)}</b>
+                      <span>
+                        CRE{' '}
+                        {c.cre_average === null
+                          ? '—'
+                          : INDICATORS[c.indicator_id].format(c.cre_average)}
+                      </span>
+                      <span>
+                        rede{' '}
+                        {c.network_average === null
+                          ? '—'
+                          : INDICATORS[c.indicator_id].format(c.network_average)}
+                      </span>
+                    </>
+                  }
+                />
               ))}
-            </div>
+            </Card>
           )}
 
-          <div className="chartblock">
-            <div className="ct">
-              <h5>Plano de ação</h5>
-              <span className="cs">rascunho de IA · exige validação humana</span>
-            </div>
+          <Card subtitle="rascunho de IA · exige validação humana" title="Plano de ação" variant="chart">
+            {/* `.planbar` não é medidor apesar do nome: é a linha de ação, em
+                flex, que segura o foco e o botão. */}
             <div className="planbar">
-              <label className="ctl">
-                <span>Foco</span>
-                <select value={focus} onChange={(e) => setFocus(e.target.value)}>
-                  {FOCUS_OPTIONS.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button type="button" className="btn solid inline" onClick={runPlan} disabled={planning}>
-                {planning ? 'gerando…' : 'Gerar plano de ação'}
-              </button>
+              <FilterControl label="Foco">
+                <FilterSelect ariaLabel="Foco" items={FOCUS_ITEMS} onValueChange={setFocus} value={focus} />
+              </FilterControl>
+              <Button
+                className={PLAN_BUTTON}
+                disabled={planning}
+                onClick={runPlan}
+                type="button"
+                variant="ghost"
+              >
+                {planning ? (
+                  <>
+                    <Spinner aria-hidden="true" aria-label={undefined} className="size-3" role={undefined} />
+                    gerando…
+                  </>
+                ) : (
+                  'Gerar plano de ação'
+                )}
+              </Button>
             </div>
 
-            {planError && <div className="fallbacknote">{planError}</div>}
+            {planError && <Note className="fallbacknote">{planError}</Note>}
 
             {plan && (
               <div className="plan">
@@ -497,12 +562,7 @@ export default function Escola() {
                     </ul>
                   </div>
                 ))}
-                <div className="cannot">
-                  <div className="h">Guardrails</div>
-                  {plan.guardrails.map((g) => (
-                    <p key={g}>{g}</p>
-                  ))}
-                </div>
+                <Guardrails items={plan.guardrails} title="Guardrails" />
                 <div className="planfoot mono">
                   {plan.provider} · {plan.model} · role {plan.role} ·{' '}
                   {plan.policy.raw_rows_access === 'denied' ? 'linhas brutas negadas' : ''} ·{' '}
@@ -510,34 +570,34 @@ export default function Escola() {
                 </div>
               </div>
             )}
-          </div>
+          </Card>
         </div>
 
         <div className="qpanel">
-          <h5>Localização</h5>
+          <SectionHeading>Localização</SectionHeading>
           {coords ? (
             <div className="mono coordbox">
               <div>lat {coords.latitude.toFixed(6)}</div>
               <div>lon {coords.longitude.toFixed(6)}</div>
             </div>
           ) : (
-            <p style={{ fontSize: 12, color: 'var(--ink-3)' }}>Sem coordenada nesta release.</p>
+            <Note className="text-[12px] leading-[1.5]">Sem coordenada nesta release.</Note>
           )}
 
-          <h5 style={{ marginTop: 22 }}>Proveniência</h5>
-          <div className="mono" style={{ fontSize: 10.5, color: 'var(--ink-3)', lineHeight: 1.8 }}>
+          <SectionHeading className="mt-[22px]!">Proveniência</SectionHeading>
+          <Note className="text-[10.5px] leading-[1.8]" mono>
             <div>identidade {identity.source_kind}</div>
             {ctx && <div>fonte {ctx.provenance.source_id}</div>}
             {ctx?.provenance.data_version && (
               <div>versão {ctx.provenance.data_version.slice(0, 16)}…</div>
             )}
-          </div>
+          </Note>
 
-          <h5 style={{ marginTop: 22 }}>Limitações</h5>
+          <SectionHeading className="mt-[22px]!">Limitações</SectionHeading>
           {(ctx?.limitations ?? map.data?.limitations ?? []).map((l) => (
-            <p key={l} style={{ fontSize: 11.5, color: 'var(--ink-2)', marginTop: 8, lineHeight: 1.5 }}>
+            <Note className="mt-2 text-ink-2 leading-[1.5]" key={l}>
               {l}
-            </p>
+            </Note>
           ))}
 
           {takesAdr(identity.school_type) && (
