@@ -2,11 +2,11 @@ import { ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Wordmark } from './Wordmark';
 
-export function TopBar({ voltarPara, passo, total }: { voltarPara?: string | null; passo?: number; total?: number }) {
+export function TopBar({ voltarPara, passo, total, cheio = false }: { voltarPara?: string | null; passo?: number; total?: number; cheio?: boolean }) {
   const comProgresso = typeof passo === 'number' && typeof total === 'number';
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
-      <div className="mx-auto flex h-topbar w-full max-w-page items-center gap-2 px-[var(--pad-x)]">
+      <div className={cheio ? 'mx-auto flex h-topbar w-full max-w-none items-center gap-2 px-4 lg:px-6 2xl:px-8' : 'mx-auto flex h-topbar w-full max-w-page items-center gap-2 px-[var(--pad-x)]'}>
         {voltarPara ? (
           <Link to={voltarPara} className="-ml-2 grid size-11 shrink-0 place-items-center rounded-full text-brand hover:bg-brand-soft" aria-label="Voltar">
             <ArrowLeft className="size-5" />
