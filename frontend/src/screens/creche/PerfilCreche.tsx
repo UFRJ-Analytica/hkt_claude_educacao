@@ -25,7 +25,10 @@ function unidadePadrao(): string {
   } catch {
     /* sem armazenamento */
   }
-  return todasUnidades().find((u) => u.cre === 7 && u.ofertas.some((o) => o.grupamento === 'Maternal I'))?.id ?? todasUnidades()[0].id;
+  // Demo: a unidade com mais inscritos que oferta Maternal I (a turma das inscrições de exemplo).
+  const candidatas = todasUnidades().filter((u) => u.ofertas.some((o) => o.grupamento === 'Maternal I'));
+  const soma = (u: Unidade) => u.ofertas.reduce((s, o) => s + o.inscritos, 0);
+  return [...candidatas].sort((a, b) => soma(b) - soma(a))[0]?.id ?? todasUnidades()[0].id;
 }
 
 function Chip({ ativo, onClick, children }: { ativo: boolean; onClick: () => void; children: string }) {

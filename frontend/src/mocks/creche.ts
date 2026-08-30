@@ -223,7 +223,8 @@ function gerarBase(u: Unidade): Base[] {
   const out: Base[] = [];
   let seq = 0;
   for (const o of u.ofertas) {
-    const n = Math.min(o.inscritos, 12 + Math.floor(rand() * 8));
+    // Demo: ao menos 8 linhas por oferta mesmo quando o extrato traz poucas inscrições da unidade.
+    const n = Math.max(8, Math.min(o.inscritos, 12 + Math.floor(rand() * 8)));
     for (let i = 0; i < n; i += 1) {
       seq += 1;
       const menina = rand() < 0.5;
