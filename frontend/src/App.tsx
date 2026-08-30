@@ -7,6 +7,7 @@ import { Inicio } from './screens/Inicio';
 import { NaoEncontrado } from './screens/NaoEncontrado';
 import { PerfilCreche } from './screens/creche/PerfilCreche';
 import { Portal } from './screens/Portal';
+import { Secretaria } from './screens/Secretaria';
 import { PassoCrianca } from './screens/passos/PassoCrianca';
 import { PassoDocumentos } from './screens/passos/PassoDocumentos';
 import { PassoEndereco } from './screens/passos/PassoEndereco';
@@ -33,6 +34,7 @@ export function App() {
         <Route path="/app" element={<Inicio />} />
         <Route path="/app/*" element={<Navigate to="/app" replace />} />
         <Route path="/creche" element={<PerfilCreche />} />
+        <Route path="/secretaria" element={<Secretaria />} />
         <Route path="/inscricao" element={<Navigate to="/inscricao/crianca" replace />} />
         <Route path="/inscricao/crianca" element={<PassoCrianca />} />
         <Route path="/inscricao/responsavel" element={<PassoResponsavel />} />

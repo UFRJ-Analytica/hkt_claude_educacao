@@ -98,6 +98,9 @@ export function Portal() {
           <Link to="/app/inscricao/unidades" className="hover:text-[#13335a]">
             Escolas por região
           </Link>
+          <Link to="/secretaria" className="hover:text-[#13335a]">
+            Secretaria
+          </Link>
         </nav>
       </header>
 

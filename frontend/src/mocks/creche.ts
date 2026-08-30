@@ -1,6 +1,7 @@
 import type {
   CanalAviso,
   Chamada,
+  Oferta,
   CriterioId,
   CriterioValidacao,
   DesfechoTentativa,
@@ -21,19 +22,40 @@ import type {
 } from '../api/types';
 import { CRITERIOS, CRITERIOS_POR_ID, pontuar } from '../domain/prioridade';
 import { JANELA_DESFAZER_MS, somarDiasUteis } from '../domain/validacao';
-import { BAIRROS, normalizar } from './bairros';
+import { BAIRROS, CRE_NOMES, normalizar } from './bairros';
+import { haversineKm } from '../domain/geo';
 import { aplicarComparecimentoNaFamilia, aplicarValidacaoNaFamilia, atualizarTelefoneDaFamilia, registrarCobrancaNaFamilia, todasInscricoesLocais } from './inscricoes';
 import { todasUnidades, unidadePorId } from './unidades';
+import { META as UNIDADES_META } from './unidades.generated';
+import { chaveOferta, FILA_POR_OFERTA, INSCRITOS_META } from './inscritos.generated';
+import { riscoDaUnidade } from './risco';
 
 /**
- * Perfil da creche — dados de demonstração.
+ * Perfil da creche — dados de demonstração sobre números reais.
  *
- * Inscritos e chamadas de cada unidade são gerados de forma determinística
- * (mesma semente das creches) e mesclados com as inscrições feitas neste
- * aparelho pelo app da família. O que o diretor faz (validar, disparar
- * mensagem, registrar desfecho, corrigir telefone) fica em `localStorage`,
- * em registros append-only, e reflete no acompanhamento da família.
+ * As CONTAGENS por unidade × grupamento × turno (inscritos, prioritários,
+ * confirmados) vêm do extrato da SME no BigQuery (integracao-sme): de
+ * `inscritos.generated.ts` quando o passo agregado foi rodado, senão de
+ * `unidades.generated.ts`. As LINHAS por criança (nome, critérios, contato)
+ * são sintéticas e determinísticas, porque registro de criança não entra no
+ * Git; o risco do modelo XGBoost da unidade guia as respostas à convocação.
+ * O que o diretor faz fica em `localStorage`, append-only, e reflete no
+ * acompanhamento da família.
  */
+
+/** Números reais da oferta: pipeline agregado se existir, senão o extrato de unidades. */
+export function filaReal(u: Unidade, o: Pick<Oferta, 'grupamento' | 'horario' | 'inscritos' | 'inscritosPrioritarios' | 'vagas'>): { inscritos: number; prioritarios: number; confirmados: number; porOpcao: number[] | null; fonte: 'agregado' | 'unidades' } {
+  const f = INSCRITOS_META.gerado ? FILA_POR_OFERTA[chaveOferta(u.id, o.grupamento, o.horario)] : undefined;
+  if (f) return { inscritos: f.inscritos, prioritarios: f.prioritarios, confirmados: f.confirmados, porOpcao: f.porOpcao ?? null, fonte: 'agregado' };
+  return { inscritos: o.inscritos, prioritarios: o.inscritosPrioritarios, confirmados: Math.min(o.vagas, Math.round(o.vagas * 0.45)), porOpcao: null, fonte: 'unidades' };
+}
+
+/** Nota de proveniência mostrada no rodapé do perfil da creche. */
+export function notaFonteFila(): string {
+  if (INSCRITOS_META.gerado) return `Contagens por oferta agregadas no BigQuery (${INSCRITOS_META.inscricoes.toLocaleString('pt-BR')} inscrições, ${INSCRITOS_META.generated_at?.slice(0, 10) ?? ''}); linhas por criança são sintéticas`;
+  const amostra = /LIMIT\s+\d+/i.test(UNIDADES_META.query) ? ` — amostra de ${UNIDADES_META.rows_read.toLocaleString('pt-BR')} inscrições (${UNIDADES_META.query.match(/LIMIT\s+\d+/i)?.[0]}); rode integracao-sme/build_inscritos.py para a fila completa` : '';
+  return `Contagens por oferta do extrato da SME${amostra}; linhas por criança são sintéticas`;
+}
 const SEED = 20260830;
 const AUTOR_PADRAO = 'Direção da unidade';
 
@@ -223,8 +245,10 @@ function gerarBase(u: Unidade): Base[] {
   const out: Base[] = [];
   let seq = 0;
   for (const o of u.ofertas) {
-    // Demo: ao menos 8 linhas por oferta mesmo quando o extrato traz poucas inscrições da unidade.
-    const n = Math.max(8, Math.min(o.inscritos, 12 + Math.floor(rand() * 8)));
+    // Uma linha por inscrição contada no extrato; os `prioritarios` primeiros recebem critério.
+    const real = filaReal(u, o);
+    const n = Math.min(400, real.inscritos);
+    const pesoOpcao = real.porOpcao && real.porOpcao.length === 5 && real.porOpcao.some((x) => x > 0) ? real.porOpcao : null;
     for (let i = 0; i < n; i += 1) {
       seq += 1;
       const menina = rand() < 0.5;
@@ -234,8 +258,27 @@ function gerarBase(u: Unidade): Base[] {
       const bairro = rand() < 0.6 ? u.bairro : (vizinhos[Math.floor(rand() * vizinhos.length)]?.nome ?? u.bairro);
       const criadaEm = agoraMenos((3 + rand() * 60) * 86400000);
       const r = rand();
-      const opcao = r < 0.45 ? 1 : r < 0.7 ? 2 : r < 0.85 ? 3 : r < 0.95 ? 4 : 5;
-      const criterios = CRITERIOS.filter((c) => rand() < PROB_CRITERIO[c.id]).map((c) => ({ id: c.id, evidencia: evidenciaSintetica(rand, c.id, nomeResp, nome, criadaEm) }));
+      let opcao = r < 0.45 ? 1 : r < 0.7 ? 2 : r < 0.85 ? 3 : r < 0.95 ? 4 : 5;
+      if (pesoOpcao) {
+        const total = pesoOpcao.reduce((s, x) => s + x, 0);
+        let acc = 0;
+        const alvo = r * total;
+        opcao = 5;
+        for (let k = 0; k < 5; k += 1) {
+          acc += pesoOpcao[k];
+          if (alvo < acc) {
+            opcao = k + 1;
+            break;
+          }
+        }
+      }
+      // Prioritários na proporção real do extrato: os primeiros `prioritarios` da oferta têm ao menos um critério.
+      const prioritario = i < real.prioritarios;
+      let criterios = prioritario ? CRITERIOS.filter((c) => rand() < PROB_CRITERIO[c.id]).map((c) => ({ id: c.id, evidencia: evidenciaSintetica(rand, c.id, nomeResp, nome, criadaEm) })) : [];
+      if (prioritario && criterios.length === 0) {
+        const c = rand() < 0.5 ? CRITERIOS_POR_ID.bolsa_familia : CRITERIOS_POR_ID.responsavel_trabalha;
+        criterios = [{ id: c.id, evidencia: evidenciaSintetica(rand, c.id, nomeResp, nome, criadaEm) }];
+      }
       out.push({
         codigo: `RIO-${u.id.slice(-4)}${String(seq).padStart(3, '0')}-${(hash(u.id + seq) % 46656).toString(36).toUpperCase().padStart(3, '0')}`,
         crianca: { nome, nascimento: isoEntre(rand, FAIXA[o.grupamento][0], FAIXA[o.grupamento][1]), sexo: menina ? 'F' : 'M' },
@@ -336,7 +379,7 @@ export async function mockResumoUnidade(unidadeId: string, f: FiltrosUnidade): P
   let total = 0;
   let prioritarias = 0;
   for (const o of ofertas) {
-    const confirmados = Math.round(o.vagas * (0.3 + rand() * 0.3));
+    const confirmados = Math.min(o.vagas, filaReal(u, o).confirmados + Math.round(rand() * 0));
     const matriculadosDoPar = matriculados.filter((c) => c.crianca.grupamento === o.grupamento && c.crianca.horario === o.horario).length;
     const abertas = Math.max(0, o.vagas - confirmados - matriculadosDoPar);
     total += abertas;
@@ -348,7 +391,7 @@ export async function mockResumoUnidade(unidadeId: string, f: FiltrosUnidade): P
     naFila: inscritos.length,
     aguardandoValidacao: inscritos.filter((i) => i.criterios.some((c) => c.estado === 'pendente')).length,
     vagasAbertas: { total, prioritarias, gerais: total - prioritarias },
-    proxyVagas: 'vaga aberta = vagas ofertadas do par − matrículas já confirmadas no processo (proxy; a base não define vaga)',
+    proxyVagas: `${notaFonteFila()}. Vaga aberta = vagas ofertadas do par − matrículas já confirmadas no processo (proxy; a base não define vaga)`,
   };
 }
 
@@ -392,6 +435,8 @@ function gerarChamadas(u: Unidade): Chamada[] {
   const inscritos = montarInscritos(u).filter((i) => i.origem === 'demo');
   const out: Chamada[] = [];
   for (const o of u.ofertas) {
+    // Nem toda oferta está em convocação ao mesmo tempo: ~1/3 delas tem chamadas abertas na demo.
+    if (rand() > 0.35) continue;
     const topo = inscritos.filter((i) => i.grupamento === o.grupamento && i.horario === o.horario && i.posicao <= Math.min(o.vagas, 3));
     for (const i of topo) {
       const horas = 2 + rand() * 70;
@@ -403,11 +448,15 @@ function gerarChamadas(u: Unidade): Chamada[] {
       let situacao: SituacaoChamada = 'a_chamar';
       let dataPrevista: string | null = null;
       const tentativas = tentativasAutomaticas(emitidaEm, base.contato.pixVerificada, Boolean(base.contato.email));
-      if (r < 0.3) {
+      // Risco do modelo XGBoost da unidade (risco.generated): quanto maior, menos famílias aceitam no app.
+      const risco = riscoDaUnidade(u.id)?.risco ?? 0.5;
+      const pAceita = Math.max(0.1, Math.min(0.6, 0.6 - risco * 0.5));
+      const pRecusa = pAceita + Math.max(0.05, Math.min(0.25, risco * 0.25));
+      if (r < pAceita) {
         respostaApp = { resposta: 'aceita', em: new Date(new Date(emitidaEm).getTime() + rand() * 20 * 3600000).toISOString() };
         situacao = 'agendado';
         dataPrevista = new Date(new Date(prazo).getTime() - 20 * 3600000).toISOString();
-      } else if (r < 0.4) {
+      } else if (r < pRecusa) {
         respostaApp = { resposta: 'recusada', em: new Date(new Date(emitidaEm).getTime() + rand() * 30 * 3600000).toISOString() };
         situacao = 'encerrada';
       } else if (horas > 20) {
@@ -600,4 +649,129 @@ export function limparRegistrosDaDirecao(): void {
   } catch {
     /* nada */
   }
+}
+
+/* ---------- Secretaria: panorama da rede (tela de acompanhamento) ---------- */
+
+export interface PanoramaOferta {
+  grupamento: Grupamento;
+  horario: Horario;
+  inscritos: number;
+  emEspera: number;
+  confirmados: number;
+  vagas: number;
+}
+export interface PanoramaUnidade {
+  id: string;
+  nome: string;
+  cre: number;
+  bairro: string;
+  lat: number;
+  lon: number;
+  inscritos: number;
+  emEspera: number;
+  confirmados: number;
+  vagas: number;
+  /** crianças por vaga preenchida (proxy); null sem dado */
+  pressao: number | null;
+  risco: number | null;
+  ofertas: PanoramaOferta[];
+}
+export interface Panorama {
+  inscritos: number;
+  emEspera: number;
+  convocacoesAbertas: number;
+  semResposta: number;
+  porCre: Array<{ cre: number; nome: string; unidades: number; inscritos: number; emEspera: number }>;
+  unidades: PanoramaUnidade[];
+  fonte: string;
+}
+export interface FiltrosPanorama extends FiltrosUnidade {
+  cre: number | null;
+}
+
+function ofertasDaUnidade(u: Unidade, f: FiltrosUnidade): PanoramaOferta[] {
+  return filtrar(u.ofertas, f).map((o) => {
+    const real = filaReal(u, o);
+    const confirmados = Math.min(o.vagas, real.confirmados);
+    return { grupamento: o.grupamento, horario: o.horario, inscritos: real.inscritos, emEspera: Math.max(0, real.inscritos - confirmados), confirmados, vagas: o.vagas };
+  });
+}
+
+function unidadePanorama(u: Unidade, f: FiltrosUnidade): PanoramaUnidade | null {
+  const ofertas = ofertasDaUnidade(u, f);
+  if (ofertas.length === 0) return null;
+  const inscritos = ofertas.reduce((s, o) => s + o.inscritos, 0);
+  const confirmados = ofertas.reduce((s, o) => s + o.confirmados, 0);
+  const vagas = ofertas.reduce((s, o) => s + o.vagas, 0);
+  return {
+    id: u.id,
+    nome: u.nome,
+    cre: u.cre,
+    bairro: u.bairro,
+    lat: u.lat,
+    lon: u.lon,
+    inscritos,
+    emEspera: ofertas.reduce((s, o) => s + o.emEspera, 0),
+    confirmados,
+    vagas,
+    pressao: confirmados > 0 ? inscritos / confirmados : null,
+    risco: riscoDaUnidade(u.id)?.risco ?? null,
+    ofertas,
+  };
+}
+
+export async function mockPanorama(f: FiltrosPanorama): Promise<Panorama> {
+  const base = todasUnidades().filter((u) => f.cre === null || u.cre === f.cre);
+  const unidades = base.map((u) => unidadePanorama(u, f)).filter((x): x is PanoramaUnidade => x !== null);
+  let convocacoesAbertas = 0;
+  let semResposta = 0;
+  const agora = Date.now();
+  for (const u of base) {
+    for (const c of todasChamadas(u)) {
+      if (f.grupamento && c.crianca.grupamento !== f.grupamento) continue;
+      if (f.horario && c.crianca.horario !== f.horario) continue;
+      if (c.situacao === 'encerrada') continue;
+      const vencida = new Date(c.prazo).getTime() < agora;
+      if (!vencida) convocacoesAbertas += 1;
+      const falou = c.respostaApp !== null || c.tentativas.some((t) => t.desfecho === 'falei');
+      if (vencida && !falou) semResposta += 1;
+    }
+  }
+  const porCre = Object.keys(CRE_NOMES)
+    .map(Number)
+    .map((cre) => {
+      const us = unidades.filter((u) => u.cre === cre);
+      return { cre, nome: CRE_NOMES[cre], unidades: us.length, inscritos: us.reduce((s, u) => s + u.inscritos, 0), emEspera: us.reduce((s, u) => s + u.emEspera, 0) };
+    });
+  return {
+    inscritos: unidades.reduce((s, u) => s + u.inscritos, 0),
+    emEspera: unidades.reduce((s, u) => s + u.emEspera, 0),
+    convocacoesAbertas,
+    semResposta,
+    porCre,
+    unidades: unidades.sort((a, b) => (b.pressao ?? -1) - (a.pressao ?? -1)),
+    fonte: notaFonteFila(),
+  };
+}
+
+/** Creches vizinhas (2 km) com vaga livre no MESMO grupamento e turno. */
+export function mockAlternativas(unidadeId: string, f: FiltrosUnidade, raioKm = 2): Array<{ unidade: PanoramaUnidade; distanciaKm: number; vagasLivres: number; par: string }> {
+  const u = unidadePorId(unidadeId);
+  if (!u) return [];
+  const minhas = ofertasDaUnidade(u, f);
+  const out: Array<{ unidade: PanoramaUnidade; distanciaKm: number; vagasLivres: number; par: string }> = [];
+  for (const v of todasUnidades()) {
+    if (v.id === u.id) continue;
+    const d = haversineKm(u.lat, u.lon, v.lat, v.lon);
+    if (d > raioKm) continue;
+    const pv = unidadePanorama(v, f);
+    if (!pv) continue;
+    for (const o of pv.ofertas) {
+      if (!minhas.some((m) => m.grupamento === o.grupamento && m.horario === o.horario)) continue;
+      const livres = o.vagas - o.confirmados;
+      if (livres > 0) out.push({ unidade: pv, distanciaKm: d, vagasLivres: livres, par: `${o.grupamento} · ${o.horario}` });
+    }
+  }
+  return out.sort((a, b) => a.distanciaKm - b.distanciaKm).slice(0, 8);
 }

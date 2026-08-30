@@ -1,4 +1,4 @@
-import { Check, MessageSquareWarning, RotateCcw, X } from 'lucide-react';
+import { Check, Eye, FileImage, ImageOff, MessageSquareWarning, RotateCcw, X } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { registrarValidacao } from '@/api/client';
 import type { CriterioId, CriterioValidacao, DocumentoAnalise, DocumentoStatus, EstadoValidacao, EventoValidacao, InscritoUnidade, MotivoRecusa, Unidade } from '@/api/types';
@@ -277,6 +277,7 @@ function BlocoCriterio({ c, ocupado, bloqueado, onConfirmar, onRecusar, onDesfaz
             <span className="text-ink-2">{ev.texto}</span>
           </div>
           {ev.analise ? <Analise a={ev.analise} /> : null}
+          {ev.tipo === 'pre_analise' || ev.tipo === 'documento' ? <DocumentoVisual analise={ev.analise} documento={c.documento} /> : null}
           {ev.tipo === 'documento' ? <p className="mt-1 text-ink-3">Documento esperado: {c.documento}.</p> : null}
         </Linha>
         <Linha rotulo="Estado">
@@ -457,5 +458,70 @@ function DialogoRecusar({ criterio, ocupado, onFechar, onRecusar }: { criterio: 
         </DialogFooter>
       </DialogPopup>
     </Dialog>
+  );
+}
+
+/* ---------- documento: miniatura/placeholder e visualização ---------- */
+
+/**
+ * Toda confirmação que depende de documento mostra a foto enviada pelo app
+ * (miniatura guardada com a inscrição) ou um placeholder quando ainda não há
+ * foto. "Ver documento" abre em tamanho maior, com o que a pré-análise leu —
+ * é o que a direção usa para resolver um problema sem chamar a família.
+ */
+function DocumentoVisual({ analise, documento }: { analise: DocumentoAnalise | undefined; documento: string }) {
+  const [aberto, setAberto] = useState(false);
+  const temFoto = Boolean(analise?.miniatura);
+  const enviada = Boolean(analise);
+  return (
+    <div className="mt-2 flex items-center gap-3 rounded-xl border border-dashed border-line-2 bg-surface p-2">
+      <button
+        type="button"
+        onClick={() => setAberto(true)}
+        className="relative grid h-16 w-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-surface-2 text-ink-3 hover:ring-2 hover:ring-brand-soft-2"
+        aria-label={temFoto ? 'Ver a foto do documento' : 'Ver detalhes do documento'}
+      >
+        {temFoto ? <img src={analise!.miniatura} alt={`Foto: ${documento}`} className="h-full w-full object-cover" /> : enviada ? <FileImage className="size-7" /> : <ImageOff className="size-7" />}
+      </button>
+      <div className="min-w-0 flex-1 text-[12px] leading-snug">
+        <p className="font-semibold text-ink">{documento}</p>
+        <p className="text-ink-3">{temFoto ? `Foto enviada pelo app${analise?.nomeArquivo ? ` · ${analise.nomeArquivo}` : ''}` : enviada ? 'Foto enviada pelo app · miniatura indisponível nesta inscrição de demonstração' : 'Sem foto ainda — a família pode enviar pelo app ou trazer o original'}</p>
+      </div>
+      <Button size="sm" variant="outline" className="h-9 shrink-0" onClick={() => setAberto(true)}>
+        <Eye />
+        Ver
+      </Button>
+      {aberto ? (
+        <Dialog open onOpenChange={(o) => !o && setAberto(false)}>
+          <DialogPopup className="sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{documento}</DialogTitle>
+              <DialogDescription>{temFoto ? 'Foto enviada pela família pelo app. O original continua obrigatório na matrícula.' : enviada ? 'A família enviou a foto pelo app; nesta demonstração a imagem não está disponível.' : 'Ainda não há foto deste documento. Use “Cobrar documento” ou confira o original na unidade.'}</DialogDescription>
+            </DialogHeader>
+            <DialogPanel className="grid gap-3">
+              <div className="grid min-h-[240px] place-items-center overflow-hidden rounded-xl bg-surface-2">
+                {temFoto ? <img src={analise!.miniatura} alt={`Foto: ${documento}`} className="max-h-[60vh] w-auto max-w-full object-contain" /> : <div className="flex flex-col items-center gap-2 p-6 text-ink-3">{enviada ? <FileImage className="size-12" /> : <ImageOff className="size-12" />}<span className="text-[13px]">{enviada ? 'imagem indisponível' : 'sem foto'}</span></div>}
+              </div>
+              {analise && Object.keys(analise.camposLidos).length > 0 ? (
+                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-lg bg-surface-2 px-3 py-2 text-[13px]">
+                  {Object.entries(analise.camposLidos).map(([k, v]) => (
+                    <div key={k} className="contents">
+                      <dt className="text-ink-3">{k}</dt>
+                      <dd className="font-medium text-ink">{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
+              {analise?.motivo ? <p className="text-[13px] leading-snug text-ink-2">{analise.motivo}</p> : null}
+            </DialogPanel>
+            <DialogFooter>
+              <Button size="lg" variant="outline" className="max-lg:h-11" onClick={() => setAberto(false)}>
+                Fechar
+              </Button>
+            </DialogFooter>
+          </DialogPopup>
+        </Dialog>
+      ) : null}
+    </div>
   );
 }

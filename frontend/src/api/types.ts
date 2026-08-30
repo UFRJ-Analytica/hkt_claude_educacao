@@ -68,6 +68,9 @@ export interface DocumentoAnalise {
   /** O que o modelo leu no documento — mostrado ao usuário para conferência. */
   camposLidos: Record<string, string>;
   analisadoEm: string;
+  /** Miniatura da foto enviada (data URL reduzida), para a unidade conferir quando houver problema. */
+  miniatura?: string;
+  nomeArquivo?: string;
 }
 
 export type StatusInscricao =
