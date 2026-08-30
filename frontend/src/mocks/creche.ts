@@ -435,6 +435,8 @@ function gerarChamadas(u: Unidade): Chamada[] {
   const inscritos = montarInscritos(u).filter((i) => i.origem === 'demo');
   const out: Chamada[] = [];
   for (const o of u.ofertas) {
+    // Nem toda oferta está em convocação ao mesmo tempo: ~1/3 delas tem chamadas abertas na demo.
+    if (rand() > 0.35) continue;
     const topo = inscritos.filter((i) => i.grupamento === o.grupamento && i.horario === o.horario && i.posicao <= Math.min(o.vagas, 3));
     for (const i of topo) {
       const horas = 2 + rand() * 70;
