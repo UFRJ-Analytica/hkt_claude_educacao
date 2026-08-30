@@ -117,6 +117,8 @@ export interface Inscricao {
   endereco: Endereco;
   trabalho: Endereco | null;
   criterios: CriterioId[];
+  /** Critérios recusados pela unidade na validação — saem da pontuação. */
+  criteriosRecusados?: CriterioId[];
   pontuacao: number;
   documentos: Partial<Record<CriterioId, DocumentoAnalise>>;
   opcoes: string[];
@@ -132,4 +134,134 @@ export interface ApiSource {
   mode: ApiMode;
   base: string | null;
   note: string;
+}
+
+/* ============================================================
+   Perfil da creche — validação e convocação (role `creche`)
+   ============================================================ */
+
+export type EvidenciaTipo = 'rmi' | 'base' | 'pre_analise' | 'documento';
+
+export interface Evidencia {
+  tipo: EvidenciaTipo;
+  /** Texto pronto para o diretor: de onde vem a informação ou aviso de que não há nenhuma. */
+  texto: string;
+  em?: string;
+  analise?: DocumentoAnalise;
+}
+
+export type EstadoValidacao = 'pendente' | 'confirmado' | 'recusado';
+export type MotivoRecusa = 'documento_nao_apresentado' | 'documento_invalido' | 'nao_compareceu' | 'outro';
+
+/** Registro append-only: nunca se apaga; desfazer é um novo evento apontando para o anterior. */
+export interface EventoValidacao {
+  id: string;
+  inscricao: string;
+  unidadeId: string;
+  criterio: CriterioId;
+  estado: EstadoValidacao;
+  motivo?: MotivoRecusa;
+  observacao?: string;
+  autor: string;
+  em: string;
+  desfazDe?: string;
+}
+
+export interface CriterioValidacao {
+  id: CriterioId;
+  titulo: string;
+  pergunta: string;
+  pontos: number;
+  documento: string;
+  evidencia: Evidencia;
+  estado: EstadoValidacao;
+  ultimoEvento: EventoValidacao | null;
+}
+
+export interface InscritoUnidade {
+  codigo: string;
+  crianca: { nome: string; nascimento: string; sexo: 'F' | 'M' | 'nao_informar' };
+  responsavel: { nome: string; bairro: string; cep: string; telefone: string };
+  grupamento: Grupamento;
+  horario: Horario;
+  /** Posição desta unidade entre as preferências da família (1ª a 5ª). */
+  opcao: number;
+  aceitaRealocacao: boolean;
+  criadaEm: string;
+  pontosDeclarados: number;
+  pontosConfirmados: number;
+  criterios: CriterioValidacao[];
+  /** Posição na fila do par grupamento × turno desta unidade. */
+  posicao: number;
+  vagasDoPar: number;
+  /** Está na borda do corte: confirmar ou recusar aqui muda quem entra. */
+  decideVaga: boolean;
+  origem: 'app' | 'demo';
+}
+
+export interface ResumoUnidade {
+  unidade: Unidade;
+  telefone: string;
+  naFila: number;
+  aguardandoValidacao: number;
+  vagasAbertas: { total: number; prioritarias: number; gerais: number };
+  proxyVagas: string;
+}
+
+export type SituacaoChamada = 'a_chamar' | 'tentando' | 'falei' | 'sem_contato' | 'agendado' | 'encerrada';
+export type CanalMensagem = 'whatsapp' | 'sms' | 'ligacao';
+export type CanalAviso = 'app' | 'pix' | 'email' | CanalMensagem;
+export type DesfechoTentativa = 'falei' | 'nao_atendeu' | 'numero_errado';
+
+export interface Tentativa {
+  id: string;
+  em: string;
+  canal: CanalAviso;
+  automatica: boolean;
+  modelo?: string;
+  texto?: string;
+  desfecho: DesfechoTentativa | null;
+  desfechoEm?: string;
+  desfechoAutor?: string;
+  autor: string;
+}
+
+export interface Chamada {
+  id: string;
+  inscricao: string;
+  unidadeId: string;
+  crianca: { nome: string; grupamento: Grupamento; horario: Horario };
+  opcao: number;
+  aceitaRealocacao: boolean;
+  contato: {
+    telefone: string;
+    telefoneVerificado: boolean;
+    pixVerificada: boolean;
+    email: string;
+    atualizadoEm: string;
+    historico: Array<{ telefone: string; em: string; autor: string }>;
+  };
+  emitidaEm: string;
+  prazo: string;
+  prorrogacao: { em: string; justificativa: string; autor: string } | null;
+  respostaApp: { resposta: 'aceita' | 'recusada'; em: string } | null;
+  situacao: SituacaoChamada;
+  tentativas: Tentativa[];
+  dataPrevista: string | null;
+  comparecimento: { resultado: 'matriculou' | 'nao_compareceu'; em: string; autor: string } | null;
+  origem: 'app' | 'demo';
+}
+
+export type ModeloId = 'M1' | 'M2' | 'M3' | 'M4' | 'M5' | 'M6';
+
+export interface ModeloMensagem {
+  id: ModeloId;
+  titulo: string;
+  quando: string;
+  textos: Partial<Record<CanalMensagem, string>>;
+}
+
+export interface FiltrosUnidade {
+  grupamento: Grupamento | null;
+  horario: Horario | null;
 }

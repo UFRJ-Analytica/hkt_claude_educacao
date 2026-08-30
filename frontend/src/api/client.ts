@@ -18,6 +18,22 @@ import {
   type PixEnvio,
 } from '../mocks/servicos';
 import { todasUnidades, unidadePorId } from '../mocks/unidades';
+import type { CanalAviso, Chamada, DesfechoTentativa, EventoValidacao, FiltrosUnidade, InscritoUnidade, ModeloMensagem, ResumoUnidade } from './types';
+import {
+  mockBuscarUnidades,
+  mockEstenderPrazo,
+  mockListarChamadas,
+  mockListarInscritos,
+  mockRegistrarComparecimento,
+  mockRegistrarDesfecho,
+  mockRegistrarMensagem,
+  mockRegistrarCobranca,
+  mockRegistrarValidacao,
+  mockResumoUnidade,
+  type Cobranca,
+  type NovaValidacao,
+} from '../mocks/creche';
+import { MODELOS } from '../mocks/modelos';
 import type { ApiSource, CriterioId, DocumentoAnalise, Endereco, Grupamento, Horario, Inscricao, Unidade, UnidadeProxima } from './types';
 
 type RequestedApiMode = 'auto' | 'live' | 'fixture';
@@ -184,4 +200,52 @@ export async function responderConvocacao(codigo: string, aceite: boolean): Prom
 }
 export async function simularEvento(codigo: string, evento: 'convocar' | 'reiniciar'): Promise<Inscricao | null> {
   return mockSimularEvento(codigo, evento);
+}
+
+/* ---------- Perfil da creche (validação e convocação) ---------- */
+
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+function qs(f: FiltrosUnidade, extra: Record<string, string> = {}): string {
+  const p = new URLSearchParams(extra);
+  if (f.grupamento) p.set('grupamento', f.grupamento);
+  if (f.horario) p.set('turno', f.horario);
+  const s = p.toString();
+  return s ? `?${s}` : '';
+}
+
+export async function buscarUnidades(termo: string): Promise<Unidade[]> {
+  return (await live<Unidade[]>(`/unidades?busca=${encodeURIComponent(termo)}`)) ?? mockBuscarUnidades(termo);
+}
+export async function resumoUnidade(unidadeId: string, f: FiltrosUnidade): Promise<ResumoUnidade | null> {
+  return (await live<ResumoUnidade>(`/unidades/${encodeURIComponent(unidadeId)}/resumo${qs(f)}`)) ?? mockResumoUnidade(unidadeId, f);
+}
+export async function listarInscritos(unidadeId: string, f: FiltrosUnidade): Promise<InscritoUnidade[]> {
+  return (await live<InscritoUnidade[]>(`/unidades/${encodeURIComponent(unidadeId)}/inscritos${qs(f)}`)) ?? mockListarInscritos(unidadeId, f);
+}
+export async function registrarValidacao(n: NovaValidacao): Promise<EventoValidacao> {
+  return (await live<EventoValidacao>('/validacao', { method: 'POST', body: JSON.stringify(n), headers: JSON_HEADERS })) ?? mockRegistrarValidacao(n);
+}
+export async function listarChamadas(unidadeId: string, f: FiltrosUnidade): Promise<Chamada[]> {
+  return (await live<Chamada[]>(`/unidades/${encodeURIComponent(unidadeId)}/chamadas${qs(f)}`)) ?? mockListarChamadas(unidadeId, f);
+}
+export async function listarModelos(): Promise<ModeloMensagem[]> {
+  return (await live<ModeloMensagem[]>('/modelos')) ?? MODELOS;
+}
+export async function registrarMensagem(chamadaId: string, dados: { modelo: string; canal: CanalAviso; texto: string }): Promise<Chamada | null> {
+  return (await live<Chamada>(`/chamadas/${encodeURIComponent(chamadaId)}/mensagem`, { method: 'POST', body: JSON.stringify(dados), headers: JSON_HEADERS })) ?? mockRegistrarMensagem(chamadaId, dados);
+}
+export async function registrarDesfecho(chamadaId: string, tentativaId: string, desfecho: DesfechoTentativa, extra: { dataPrevista?: string; novoTelefone?: string } = {}): Promise<Chamada | null> {
+  return (
+    (await live<Chamada>(`/chamadas/${encodeURIComponent(chamadaId)}/desfecho`, { method: 'POST', body: JSON.stringify({ tentativaId, desfecho, ...extra }), headers: JSON_HEADERS })) ??
+    mockRegistrarDesfecho(chamadaId, tentativaId, desfecho, extra)
+  );
+}
+export async function estenderPrazo(chamadaId: string, justificativa: string): Promise<Chamada | null> {
+  return (await live<Chamada>(`/chamadas/${encodeURIComponent(chamadaId)}/prazo`, { method: 'POST', body: JSON.stringify({ justificativa }), headers: JSON_HEADERS })) ?? mockEstenderPrazo(chamadaId, justificativa);
+}
+export async function registrarComparecimento(chamadaId: string, resultado: 'matriculou' | 'nao_compareceu'): Promise<Chamada | null> {
+  return (await live<Chamada>(`/chamadas/${encodeURIComponent(chamadaId)}/comparecimento`, { method: 'POST', body: JSON.stringify({ resultado }), headers: JSON_HEADERS })) ?? mockRegistrarComparecimento(chamadaId, resultado);
+}
+export async function registrarCobranca(codigo: string, criterio: CriterioId, canal: CanalAviso, texto: string): Promise<Cobranca> {
+  return (await live<Cobranca>(`/inscricoes/${encodeURIComponent(codigo)}/cobranca`, { method: 'POST', body: JSON.stringify({ criterio, canal, texto }), headers: JSON_HEADERS })) ?? mockRegistrarCobranca(codigo, criterio, canal, texto);
 }
