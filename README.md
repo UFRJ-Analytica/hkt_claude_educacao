@@ -1,142 +1,133 @@
-# Vaga Certa
+# Matrícula Carioca
 
-Inteligência na fila da creche do Rio. Mostra onde a fila e a vaga ociosa se
-encontram no território, substitui a classificação por opção por **alocação por
-criança** e conduz a convocação com contato vivo, relógio e alternativa.
+A inscrição em creche do Rio, refeita de ponta a ponta: a família se inscreve
+pelo celular vendo a fila de cada creche, a direção da unidade valida e convoca
+com um clique, e a Secretaria enxerga a rede inteira em um mapa. Construído em um
+dia sobre os dados reais dos processos de 2021 a 2025.
 
 Claude Impact Lab Rio #2 · desafio da Secretaria Municipal de Educação do Rio de
 Janeiro · 30/08/2026.
 
-> **Comece por [`docs/ESTADO-DO-PROJETO.md`](docs/ESTADO-DO-PROJETO.md).** É o
-> documento de entrada: como o processo funciona de verdade, o que o dado
-> sustenta, o que não propor e o plano do dia.
+## O problema que atacamos
 
-## O problema
+A creche é o único segmento racionado da educação infantil carioca: ~89 mil
+alunos, ~900 unidades, mais de 45 mil inscrições por processo — e vaga ociosa
+convivendo com fila de espera, às vezes no mesmo bairro. Medimos isso nos dados:
 
-A SME-Rio tem vagas ociosas em creche e fila de espera expressiva ao mesmo tempo,
-às vezes no mesmo território. Creche atende 0 a 3 anos e 11 meses e é o único
-segmento racionado da educação infantil carioca: ~89 mil alunos, ~900 unidades,
-mais de 45 mil inscrições por processo.
-
-Três números medidos hoje sobre os dados reais de 2021–2025:
-
-| achado | valor |
+| o que encontramos | valor |
 |---|---|
 | filas com vaga equivalente (mesmo grupamento e turno) a menos de 2 km | **74,7%**, mediana de 1,1 km |
 | inflação da fila publicada — posições contra crianças reais, 2025 | **2,08×** (16.345 posições, 7.851 crianças) |
-| inscrições sem confirmação registrada dos critérios declarados, 2025 | **63,0%** — ver ressalva em §5.4 do documento de estado |
+| inscrições sem confirmação registrada dos critérios declarados, 2025 | **63,0%** |
 
-A causa mecânica está na própria descrição da SME: a classificação é **por
-opção**, não por criança. Uma inscrição por CPF vira até cinco registros, uma
-criança pode receber até cinco ofertas, e as quatro recusadas ficam congeladas
-três dias cada — cascateando. *"Às vezes podemos levar mais de uma semana para
-conseguir colocar uma criança em uma vaga (…) enquanto isso existe uma vaga
-ociosa e nenhuma criança sendo atendida nela."*
+Por trás dos números há um processo que depende de telefonema: a classificação
+roda em janeiro, a convocação sai em março, e o telefone cadastrado já mudou.
+A vaga espera três dias por uma família que nunca soube que foi chamada.
 
-## A proposta
+## O que fizemos de diferente
 
-1. **Mapa do descompasso** — por unidade × grupamento × turno, onde a fila está
-   represada e onde a vaga equivalente está livre, com a distância entre as duas.
-2. **Alocação por criança** — aceitação diferida sobre a preferência já declarada
-   e a pontuação já vigente. Preserva a ordem de prioridade por construção (a
-   fila é acompanhada por órgãos reguladores), elimina as vagas congeladas e
-   remove o incentivo de recusar uma vaga inviável.
-3. **Convocação com contato vivo** — painel de chamadas por tempo em status,
-   risco de contato frio, atualização de contato rastreada e a alternativa
-   próxima oferecida na hora da ligação.
+**A convocação chega — porque usamos a chave Pix como contato.** Número de
+celular troca; a chave Pix fica, porque é onde a família recebe o Bolsa Família.
+No cadastro, o app confirma a chave com um Pix de R$ 0,01 e, quando a vaga sai, o
+aviso aparece como notificação do banco, além do WhatsApp e do e-mail. É o canal
+de contato mais resiliente que uma política pública pode ter hoje, e custa um
+centavo por mensagem.
 
-## Princípios
+**A demanda sai do balcão da SME e vai para quem está na ponta.** Hoje validação
+e convocação são manuais e centralizadas. Aqui, a família responde à convocação
+no próprio app — recusar libera a vaga na mesma hora para a próxima criança — e a
+direção da creche valida critérios e conduz as chamadas com autor, horário e
+motivo registrados. A Secretaria passa a acompanhar o processo em vez de
+carregá-lo.
 
-- números e regras de negócio são calculados por código determinístico, nunca por LLM;
-- toda informação apresenta fonte, cobertura, data de referência e limitações;
-- ausência de dado não é zero; cobertura abaixo do limiar bloqueia a leitura;
-- dado anonimizado nunca é apresentado como estatística oficial;
-- módulos são registrados explicitamente e descobertos pelo frontend via capabilities;
-- agentes não acessam bancos diretamente nem executam SQL arbitrário;
-- decisões administrativas e comunicações externas exigem aprovação humana nomeada;
-- privacidade, minimização e agregação são requisitos de arquitetura.
+**A família vê a fila e continua dona da própria inscrição.** Na escolha das
+creches, cada unidade mostra quantas crianças disputam a turma, a previsão de
+posição e o risco de a alocação não se confirmar (modelo XGBoost treinado no
+BigQuery). A ordem de preferência se ajusta arrastando, e a lista pode ser
+alterada até o fechamento da matrícula — a posição é recalculada na hora, sem
+nova inscrição, sem ir ao balcão.
+
+**O gestor ganha um painel para validar e decidir.** A direção confere cada
+critério declarado com a evidência pronta — retorno do CadÚnico, foto do
+documento enviada pelo app e pré-analisada por IA (que lê e confere, mas nunca
+pontua) — e recusa só com motivo, auditável pela CRE. A Secretaria vê a rede por
+pressão (inscritos por vaga) e, para cada creche cheia, as vizinhas com vaga
+equivalente a menos de 2 km: exatamente a informação que faltava para decidir
+alocação.
+
+## O produto, em quatro telas
+
+| rota | quem usa | o quê |
+|---|---|---|
+| `/` | todos | portal no estilo matricula.rio |
+| `/app` | responsável | inscrição mobile first em 6–8 passos, código de acompanhamento, resposta à convocação |
+| `/creche` | direção da unidade | validação critério a critério e convocação com desfecho obrigatório |
+| `/secretaria` | SME | panorama da rede: números do recorte, mapa por pressão, vizinhas com vaga |
+
+## No que não abrimos mão
+
+- números e regras de negócio saem de código determinístico, nunca de LLM;
+- toda informação carrega fonte, cobertura, data de referência e limitações;
+- ausência de dado não é zero; cobertura baixa bloqueia a leitura;
+- dado anonimizado nunca vira estatística oficial;
+- o frontend descobre o backend por capacidades declaradas — sem promessa vazia;
+- decisões administrativas e comunicação externa exigem humano nomeado;
+- privacidade, minimização e agregação são arquitetura, não recomendação.
 
 ## Dados
 
-Fonte única: [`CIT-SME-RJ/dadoscreche`](https://github.com/CIT-SME-RJ/dadoscreche/) —
-inscrições por opção, respostas socioeconômicas, catálogo de perguntas com a
-régua de pontuação, cadastro de unidades, planilhas de matriculados, microáreas
-SME/IPP e nascidos vivos. Cobre os processos de 2021 a 2025.
+Fonte única: [`CIT-SME-RJ/dadoscreche`](https://github.com/CIT-SME-RJ/dadoscreche/),
+espelhada no BigQuery (`rio-sme.sme_creche.inscricoes_completa`). O pipeline
+[`integracao-sme/`](integracao-sme/README.md) agrega **dentro do BigQuery** — sem
+baixar uma linha de criança sequer — a rede de 808 unidades, a fila por oferta e
+o risco por unidade, e alimenta o frontend.
 
-Os dados passaram por anonimização (códigos artificiais, generalização temporal e
-geográfica, supressão de identificadores diretos). **Indicadores gerados a partir
-deles não representam a realidade** — o que está preservado é a estrutura do
-processo, a lógica da pontuação e a dinâmica de transição de estados. O
-entregável é o motor que a SME roda sobre o dado dela, demonstrado sobre o
-extrato.
+Os dados são anonimizados (códigos artificiais, generalização, supressão).
+**Indicadores calculados sobre eles não representam a realidade** — o que se
+preserva é a estrutura do processo, a régua de pontuação e a dinâmica dos
+estados. O entregável é o motor, demonstrado sobre o extrato; a SME o roda sobre
+o dado dela.
 
-Clonar **fora** deste repositório:
-
-```powershell
-git clone https://github.com/CIT-SME-RJ/dadoscreche
-```
-
-Nunca versione dado pessoal, upload, banco local, segredo ou payload de modelo.
-Ver [política de dados](data/README.md).
+Nunca versione dado pessoal, upload, banco local ou segredo. Ver
+[política de dados](data/README.md).
 
 ## Executar
 
-**Backend** (DuckDB já instalado; o venv não tem pandas nem numpy):
+Backend (FastAPI) e frontend (React + Vite), em dois terminais:
 
-```powershell
-Set-Location C:\Users\lucas\documents\claude-educacao\backend
-uv sync
-uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+```bash
+cd backend && uv sync && uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+cd frontend && npm install && npm run dev
 ```
 
-**Frontend**, em outro terminal:
+Abre em <http://localhost:5173> (ou na porta que o Vite indicar). `VITE_API_MODE`
+aceita `auto`, `live` ou `fixture`; em `auto`, o app usa o backend apenas nas
+capacidades que ele declarar `AVAILABLE` e diz na tela de onde cada dado vem.
 
-```powershell
-Set-Location C:\Users\lucas\documents\claude-educacao\frontend
-npm install
-npm run dev
+Para atualizar os dados do BigQuery (requer `gcloud auth login` no projeto
+`rio-sme`; dispensa o `bq`):
+
+```bash
+python3 integracao-sme/build_unidades.py --bigquery
+python3 integracao-sme/build_inscritos.py
+python3 integracao-sme/build_risco.py
 ```
-
-Abre em <http://localhost:5173>. `VITE_API_BASE` tem padrão
-`http://127.0.0.1:8000`; `VITE_API_MODE` aceita `auto`, `live` ou `fixture`.
 
 ## Gates
 
-```powershell
-Set-Location backend
-uv run ruff check app tests scripts
-uv run mypy app scripts
-uv run python -m pytest -q
-
-Set-Location ..\frontend
-npx tsc -b
-npm run build
-npm run lint
+```bash
+cd backend && uv run ruff check app tests scripts && uv run mypy app scripts && uv run python -m pytest -q
+cd frontend && npx tsc -b && npm run build && npm run lint
 ```
 
 ## Documentação
 
-**Entrada**
-
-- [Estado do projeto](docs/ESTADO-DO-PROJETO.md) — leia primeiro; tudo o mais é
-  histórico ou detalhe
-
-**Arquitetura** — válida em princípio, desatualizada em conteúdo
-
-- [Visão de arquitetura](docs/architecture/overview.md) · [ADR-001](docs/architecture/decisions/ADR-001-modular-monolith.md)
-- [Contrato de módulos](docs/architecture/module-contract.md) · [Runtime dos agentes](docs/architecture/agent-runtime.md)
-- [Proveniência](docs/architecture/data-provenance.md) · [Privacidade e segurança](docs/architecture/privacy-and-safety.md)
-
-A documentação do domínio anterior (gestão pedagógica) e os relatórios de
-pesquisa da véspera foram removidos na limpeza de 30/08. Estão no histórico do
-Git, em `4fe3df2` e anteriores.
+- [Estado do projeto](docs/ESTADO-DO-PROJETO.md) — o processo real e o que o dado sustenta
+- Specs das telas: [família](docs/plano_app_creche.md) · [perfil da creche](docs/FLUXO-PERFIL-CRECHE.md) · [Secretaria](docs/FLUXO-SECRETARIA.md)
+- Arquitetura: [visão](docs/architecture/overview.md) · [ADR-001](docs/architecture/decisions/ADR-001-modular-monolith.md) · [módulos](docs/architecture/module-contract.md) · [agentes](docs/architecture/agent-runtime.md) · [proveniência](docs/architecture/data-provenance.md) · [privacidade](docs/architecture/privacy-and-safety.md)
 
 ## Política Git
 
-Não há commit, push ou `git add` automático — a decisão é do mantenedor. Antes do
-commit, revise o conjunto staged com `git diff --cached --name-only` e confirme
-que nenhum arquivo do `dadoscreche` entrou.
-
-> **Pendência aberta:** a regra 1 do evento exige primeiro commit após as 09h de
-> 30/08 e este repositório tem histórico anterior. Ver §2 do documento de estado
-> antes de qualquer entrega.
+Sem commit ou push automático — a decisão é do mantenedor. Antes de commitar,
+revise o staged (`git diff --cached --name-only`) e confirme que nada do
+`dadoscreche` entrou.
